@@ -1,10 +1,10 @@
 
 use core::panic;
 
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream,Ident};
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, ToTokens};
-use syn::{Fields, GenericArgument, PathArguments, Type, Variant};
+use syn::{Fields, GenericArgument, PathArguments, Type, TypeReference, Variant};
 
 pub const PANIC_TY_LIST:[&'static str;4] = ["i32","u32","u64","f32"];
 pub const EGGLOG_BASIC_TY_LIST:[&'static str;3] = ["String","i64","f64"];
@@ -36,18 +36,26 @@ pub fn derive_more_path() -> proc_macro2::TokenStream {
     }
 }
 
-/// postfix a type with "Sym" except for basic types for egglog (String,i64...)
-/// for example:  Node ->  NodeSym 
-pub fn postfix_type(ty: &Type, postfix: &str) -> proc_macro2::TokenStream {
-    match ty {
-        Type::Path(type_path) => {
-            let type_name = &type_path.path.segments.last().unwrap().ident;
-            let sym_name = format_ident!("{}{}", type_name, postfix); // 拼接 `Sym`
-            quote! { #sym_name }
-        }
-        _ => panic!("Unsupported type for `WithSymNode`"),
-    }
-}
+// /// postfix a type with "Sym" except for basic types for egglog (String,i64...)
+// /// for example:  Node ->  NodeSym 
+// pub fn postfix_type(ty: &Type, postfix: &str, generic:Option<&str>) -> proc_macro2::TokenStream {
+//     match ty {
+//         Type::Path(type_path) => {
+//             let type_name = &type_path.path.segments.last().unwrap().ident;
+//             let sym_name = format_ident!("{}{}", type_name, postfix).to_token_stream(); // 拼接 `Sym`
+//             match generic{
+//                 Some(g) => {
+//                     let g = format_ident!("T");
+//                     quote!(#sym_name<#g>) // concat generic
+//                 },
+//                 None => {
+//                     sym_name
+//                 },
+//             }
+//         }
+//         _ => panic!("Unsupported type for `WithSymNode`"),
+//     }
+// }
 pub fn get_ref_type(ty: &Type) -> proc_macro2::TokenStream {
     match ty {
         Type::Path(type_path) => {
@@ -135,7 +143,16 @@ pub fn variants_to_sym_list(variant:&Variant) -> Vec<proc_macro2::TokenStream> {
                 x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
                     f1.to_token_stream()
                 }
-                _=>{postfix_type(&f1, "Sym")}
+                _=>{
+                    let f1_ident = match &f1{
+                        Type::Path(type_path) => {
+                            type_path.path.segments.last().expect("impossible").clone().ident
+                        },
+                        _=> panic!()
+                    };
+                    let name_egglogty = format_ident!("{}Ty",f1_ident);
+                    quote!( Sym<#name_egglogty>)
+                }
 
             } ;
             let ident = f2;
@@ -144,7 +161,7 @@ pub fn variants_to_sym_list(variant:&Variant) -> Vec<proc_macro2::TokenStream> {
         .collect::<Vec<_>>();
     types_and_idents
 }
-pub fn variants_to_ref_node_list(variant:&Variant) -> Vec<proc_macro2::TokenStream> {
+pub fn variants_to_ref_node_list(variant:&Variant, name:&Ident) -> Vec<proc_macro2::TokenStream> {
     let types_and_idents = match &variant.fields{
         Fields::Named(fields_named) => {
             fields_named.named.iter()
@@ -172,8 +189,14 @@ pub fn variants_to_ref_node_list(variant:&Variant) -> Vec<proc_macro2::TokenStre
                     f1.to_token_stream()
                 }
                 _=>{
-                    let node_ty = postfix_type(&f1, "Node");
-                    quote! { &#node_ty}
+                    let f1_ident = match &f1{
+                        Type::Path(type_path) => {
+                            type_path.path.segments.last().expect("impossible").clone().ident
+                        },
+                        _=> panic!()
+                    };
+                    let name_node = format_ident!("{}",f1_ident);
+                    quote! { &#name_node<T> }
                 }
             } ;
             let ident = f2;
@@ -211,7 +234,6 @@ pub fn variants_to_assign_node_field_list(variant:&Variant) -> Vec<proc_macro2::
                     ident.to_token_stream()
                 }
                 _=>{
-                    // let node_ty = postfix_type(&f1, "Node");
                     quote!(#ident.sym)
                 }
             } ;

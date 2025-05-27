@@ -1,42 +1,26 @@
-use std::fmt::Display;
-use derive_more::with_trait::Deref;
-
-use egglog_macros::ToEgglog;
+use egglog_macros::egglog_ty;
 pub use derive_more;
-
-
-pub trait LetStmtRx{
-    fn receive(received:String);
-}
-
-pub trait ToEgglog{
-    const SORT_DEF:Sort;
-}
-pub struct Sort(pub &'static str);
-
-inventory::collect!(Sort);
+pub mod wrap;
 
 // Type aliases for Vec types
-#[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 struct VecCtl {v:Vec<Ctl>}
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 struct VecWF {v:Vec<WeightedFn>}
 
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 struct VecHitBox {v:Vec<HitBox>}
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 struct Points { v:Vec<Point>}
 
 #[allow(unused)]
-// Main types
-#[derive(Debug, Clone,ToEgglog)]
+#[egglog_ty]
 enum Ctl {
     Para{vec_ctl:VecCtl},
     Seq{vec_ctl:VecCtl},
@@ -44,7 +28,7 @@ enum Ctl {
     Atom{anim_atom:AnimAtom},
 }
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum AnimAtom {
     Anim {
         object: BRabject,
@@ -69,7 +53,7 @@ enum AnimAtom {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum BRabject {
     ColoredShape {
         shape: Shape,
@@ -82,7 +66,7 @@ enum BRabject {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum Color {
     Srgba {
         red: f64,
@@ -93,7 +77,7 @@ enum Color {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum Shape {
     Polygon {
         points: Points,
@@ -101,7 +85,7 @@ enum Shape {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum Duration {
     DurationBySecs {
         seconds: f64,
@@ -112,7 +96,7 @@ enum Duration {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum BezierPathBuilder {
     Quadratic {
         control: Point,
@@ -137,7 +121,7 @@ enum BezierPathBuilder {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum Offset {
     DVec3 {
         x: f64,
@@ -151,9 +135,8 @@ enum Offset {
 }
 
 
-
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum Point {
     FixedPoint {
         offset: Offset,
@@ -172,7 +155,7 @@ enum Point {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum Weight {
     W {
         value: f64,
@@ -180,14 +163,14 @@ enum Weight {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum BuiltinF {
     Lerp{},
     Stay{},
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum Fn {
     Builtin {
         function: BuiltinF,
@@ -196,14 +179,15 @@ enum Fn {
         name: String,
     },
 }
+
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum WeightedFn {
     WF{f:Fn, w:Weight},  // 作为元组字段
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum RateCfg{
     RateFn {
         wfs : VecWF
@@ -213,7 +197,7 @@ enum RateCfg{
 
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum Path{
     BezierPath {
         bezier_path_builder:BezierPathBuilder
@@ -221,7 +205,7 @@ enum Path{
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, ToEgglog)]
+#[egglog_ty]
 enum HitBox{
     ShapedBox {
         shape:Shape
