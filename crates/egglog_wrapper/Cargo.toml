@@ -1,0 +1,10 @@
+[package]
+name = "egglog_wrapper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+inventory.workspace = true
+egglog_macros.workspace = true
+symbol_table.workspace = true
+derive_more.workspace = true

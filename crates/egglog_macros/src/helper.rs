@@ -1,0 +1,263 @@
+
+use core::panic;
+
+use proc_macro2::Span;
+use proc_macro_crate::{crate_name, FoundCrate};
+use quote::{format_ident, quote, ToTokens};
+use syn::{Fields, GenericArgument, PathArguments, Type, Variant};
+
+pub const PANIC_TY_LIST:[&'static str;4] = ["i32","u32","u64","f32"];
+pub const EGGLOG_BASIC_TY_LIST:[&'static str;3] = ["String","i64","f64"];
+
+pub fn egglog_wrapper_path() -> proc_macro2::TokenStream {
+    match (
+        crate_name("egglog_wrapper"),
+        std::env::var("CARGO_CRATE_NAME").as_deref(),
+    ) {
+        (Ok(FoundCrate::Itself), Ok(_)) => quote!(crate),
+        (Ok(FoundCrate::Name(name)), _) => {
+            let ident = proc_macro2::Ident::new(&name, Span::call_site());
+            quote!(::#ident)
+        }
+        _ => quote!(::ranim),
+    }
+}
+pub fn derive_more_path() -> proc_macro2::TokenStream {
+    match (
+        crate_name("derive_more"),
+        std::env::var("CARGO_CRATE_NAME").as_deref(),
+    ) {
+        (Ok(FoundCrate::Itself), Ok(_)) => quote!(crate),
+        (Ok(FoundCrate::Name(name)), _) => {
+            let ident = proc_macro2::Ident::new(&name, Span::call_site());
+            quote!(::#ident)
+        }
+        _ => quote!(::ranim),
+    }
+}
+
+/// postfix a type with "Sym" except for basic types for egglog (String,i64...)
+/// for example:  Node ->  NodeSym 
+pub fn postfix_type(ty: &Type, postfix: &str) -> proc_macro2::TokenStream {
+    match ty {
+        Type::Path(type_path) => {
+            let type_name = &type_path.path.segments.last().unwrap().ident;
+            let sym_name = format_ident!("{}{}", type_name, postfix); // 拼接 `Sym`
+            quote! { #sym_name }
+        }
+        _ => panic!("Unsupported type for `WithSymNode`"),
+    }
+}
+pub fn get_ref_type(ty: &Type) -> proc_macro2::TokenStream {
+    match ty {
+        Type::Path(type_path) => {
+            let type_name = &type_path.path.segments.last().unwrap().ident;
+            let sym_name = format_ident!("&{}", type_name); // 拼接 `Sym`
+            quote! { #sym_name }
+        }
+        _ => panic!("Unsupported type for `WithSymNode`"),
+    }
+}
+pub fn inventory_wrapper_path() -> proc_macro2::TokenStream {
+    match (
+        crate_name("inventory"),
+        std::env::var("CARGO_CRATE_NAME").as_deref(),
+    ) {
+        (Ok(FoundCrate::Itself), Ok(_)) => quote!(crate),
+        (Ok(FoundCrate::Name(name)), _) => {
+            let ident = proc_macro2::Ident::new(&name, Span::call_site());
+            quote!(::#ident)
+        }
+        _ => quote!(::ranim),
+    }
+}
+pub fn is_vec_type(ty: &Type) -> bool {
+    if let Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "Vec" {
+                return true;
+            }
+        }
+    }
+    false
+}
+pub fn is_box_type(ty: &Type) -> bool {
+    if let Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "Box" {
+                return true;
+            }
+        }
+    }
+    false
+}
+pub fn get_first_generic(ty:&Type) -> &Type{
+    if let Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                let arg = args.args.iter().nth(0).expect("type should at least have one generic");
+                if let GenericArgument::Type(inner_ty) = arg {
+                    // inner_ty 就是 Vec<T> 中的 T 类型
+                    return inner_ty
+                }
+            }
+        }
+    }
+    panic!("first generic generic can only be Type")
+}
+
+/// given variant a{ x:X, y:Y} 
+/// return vec![ x:XSym, y:YSym ]
+pub fn variants_to_sym_list(variant:&Variant) -> Vec<proc_macro2::TokenStream> {
+    let types_and_idents = match &variant.fields{
+        Fields::Named(fields_named) => {
+            fields_named.named.iter()
+        },
+        Fields::Unit => {
+            panic!("add `{{}}` to the unit variant")
+        },
+        _ => panic!("only support named fields")
+    }
+        .map(|f| { 
+            let f_ident = f.ident.as_ref().expect("don't support unnamed field").clone();
+            // if it's a box type we should read the first generic
+            if is_box_type(&f.ty) {
+                (get_first_generic(&f.ty).clone(), f_ident)
+            }else {
+                (f.ty.clone(), f_ident)
+            }
+        })
+        .map(|(f1,f2)|{
+            let sym_ty = match f1.to_token_stream().to_string().as_str(){
+                x if PANIC_TY_LIST.contains(&x) => {
+                    panic!("{} not supported",x)
+                }
+                x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
+                    f1.to_token_stream()
+                }
+                _=>{postfix_type(&f1, "Sym")}
+
+            } ;
+            let ident = f2;
+            quote!{ #ident :#sym_ty}
+        })
+        .collect::<Vec<_>>();
+    types_and_idents
+}
+pub fn variants_to_ref_node_list(variant:&Variant) -> Vec<proc_macro2::TokenStream> {
+    let types_and_idents = match &variant.fields{
+        Fields::Named(fields_named) => {
+            fields_named.named.iter()
+        },
+        Fields::Unit => {
+            panic!("add `{{}}` to the unit variant")
+        },
+        _ => panic!("only support named fields")
+    }
+        .map(|f| { 
+            let f_ident = f.ident.as_ref().expect("don't support unnamed field").clone();
+            // if it's a box type we should read the first generic
+            if is_box_type(&f.ty) {
+                (get_first_generic(&f.ty).clone(), f_ident)
+            }else {
+                (f.ty.clone(), f_ident)
+            }
+        })
+        .map(|(f1,f2)|{
+            let node_ty = match f1.to_token_stream().to_string().as_str(){
+                x if PANIC_TY_LIST.contains(&x) => {
+                    panic!("{} not supported",x)
+                }
+                x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
+                    f1.to_token_stream()
+                }
+                _=>{
+                    let node_ty = postfix_type(&f1, "Node");
+                    quote! { &#node_ty}
+                }
+            } ;
+            let ident = f2;
+            quote!{ #ident : #node_ty}
+        })
+        .collect::<Vec<_>>();
+    types_and_idents
+}
+pub fn variants_to_assign_node_field_list(variant:&Variant) -> Vec<proc_macro2::TokenStream> {
+    let types_and_idents = match &variant.fields{
+        Fields::Named(fields_named) => {
+            fields_named.named.iter()
+        },
+        Fields::Unit => {
+            panic!("add `{{}}` to the unit variant")
+        },
+        _ => panic!("only support named fields")
+    }
+        .map(|f| { 
+            let f_ident = f.ident.as_ref().expect("don't support unnamed field").clone();
+            // if it's a box type we should read the first generic
+            if is_box_type(&f.ty) {
+                (get_first_generic(&f.ty).clone(), f_ident)
+            }else {
+                (f.ty.clone(), f_ident)
+            }
+        })
+        .zip(variants_to_field_ident(variant))
+        .map(|((f1,f2),ident)|{
+            let node_ty = match f1.to_token_stream().to_string().as_str(){
+                x if PANIC_TY_LIST.contains(&x) => {
+                    panic!("{} not supported",x)
+                }
+                x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
+                    ident.to_token_stream()
+                }
+                _=>{
+                    // let node_ty = postfix_type(&f1, "Node");
+                    quote!(#ident.sym)
+                }
+            } ;
+            let ident = f2;
+            quote!{ #ident : #node_ty}
+        })
+        .collect::<Vec<_>>();
+    types_and_idents
+}
+
+/// given variant a{ x:X, y:Y} 
+/// return vec![ X, Y ]
+pub fn variants_to_tys(variant:&Variant) -> Vec<Type> {
+    let tys = match &variant.fields{
+        Fields::Named(fields_named) => {
+            fields_named.named.iter()
+        },
+        Fields::Unit => {
+            panic!("add `{{}}` to the unit variant")
+        },
+        _ => panic!("only support named fields")
+    }
+    .map(|f| { 
+        if is_box_type(&f.ty) {
+            get_first_generic(&f.ty).clone()
+        }else {
+            f.ty.clone()
+        }
+    })
+    .collect::<Vec<_>>();
+    tys
+}
+
+/// given variant a{ x:X, y:Y} 
+/// return vec! [ x, y ]
+pub fn variants_to_field_ident(variant:&Variant) -> impl Iterator<Item = &proc_macro2::Ident> {
+    match &variant.fields{
+        Fields::Named(fields_named) => {
+            fields_named.named.iter()
+        },
+        Fields::Unit => {
+            panic!("add `{{}}` to the unit variant")
+        },
+        _ => panic!("only support named fields")
+    }
+    .map(|f| { 
+        f.ident.as_ref().unwrap()
+    })
+}

@@ -1,0 +1,18 @@
+[package]
+name = "egglog_test"
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+inventory = "0.3.20"
+egglog_macros = { path = "crates/egglog_macros"}
+egglog_wrapper = { path = "crates/egglog_wrapper"}
+symbol_table = "0.4.0"
+derive_more = { version = "2.0.1", features = ["deref"] }
+heck = "0.5.0"
+
+[dependencies]
+egglog_macros.workspace = true
+egglog_wrapper.workspace = true
+egglog = "0.4.0"
+# inventory.workspace = true
