@@ -181,7 +181,7 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
                         }
                         impl<T:LetStmtRx> ToEgglog for #name_node_alias<T>{
                             fn to_egglog(&self) -> String{
-                                format!("(vec-of {})",self.ty.v.iter().fold("".to_owned(), |s,item| s+item.as_str()+" " ))
+                                format!("(let {} (vec-of {}))",self.sym,self.ty.v.iter().fold("".to_owned(), |s,item| s+item.as_str()+" " ))
                             }
                         }
                     };

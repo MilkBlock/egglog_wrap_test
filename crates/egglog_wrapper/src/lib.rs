@@ -6,20 +6,16 @@ pub mod wrap;
 #[egglog_ty]
 struct VecCtl {v:Vec<Ctl>}
 
-#[allow(unused)]
 #[egglog_ty]
 struct VecWF {v:Vec<WeightedFn>}
 
 
-#[allow(unused)]
 #[egglog_ty]
 struct VecHitBox {v:Vec<HitBox>}
 
-#[allow(unused)]
 #[egglog_ty]
 struct Points { v:Vec<Point>}
 
-#[allow(unused)]
 #[egglog_ty]
 enum Ctl {
     Para{vec_ctl:VecCtl},
@@ -27,7 +23,6 @@ enum Ctl {
     Await{ctl:Box<Ctl>},
     Atom{anim_atom:AnimAtom},
 }
-#[allow(unused)]
 #[egglog_ty]
 enum AnimAtom {
     Anim {
@@ -52,7 +47,6 @@ enum AnimAtom {
     },
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum BRabject {
     ColoredShape {
@@ -65,7 +59,6 @@ enum BRabject {
     },
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum Color {
     Srgba {
@@ -76,7 +69,6 @@ enum Color {
     },
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum Shape {
     Polygon {
@@ -84,7 +76,6 @@ enum Shape {
     },
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum Duration {
     DurationBySecs {
@@ -95,7 +86,6 @@ enum Duration {
     },
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum BezierPathBuilder {
     Quadratic {
@@ -120,7 +110,6 @@ enum BezierPathBuilder {
     PathEnd{},
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum Offset {
     DVec3 {
@@ -135,7 +124,6 @@ enum Offset {
 }
 
 
-#[allow(unused)]
 #[egglog_ty]
 enum Point {
     FixedPoint {
@@ -154,7 +142,6 @@ enum Point {
     },
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum Weight {
     W {
@@ -162,14 +149,12 @@ enum Weight {
     },
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum BuiltinF {
     Lerp{},
     Stay{},
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum Fn {
     Builtin {
@@ -180,13 +165,11 @@ enum Fn {
     },
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum WeightedFn {
     WF{f:Fn, w:Weight},  // 作为元组字段
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum RateCfg{
     RateFn {
@@ -196,7 +179,6 @@ enum RateCfg{
 
 
 
-#[allow(unused)]
 #[egglog_ty]
 enum Path{
     BezierPath {
@@ -204,7 +186,6 @@ enum Path{
     }
 }
 
-#[allow(unused)]
 #[egglog_ty]
 enum HitBox{
     ShapedBox {
