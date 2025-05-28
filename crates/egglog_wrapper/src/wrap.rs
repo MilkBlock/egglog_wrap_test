@@ -5,6 +5,7 @@ use symbol_table::GlobalSymbol;
 
 pub trait LetStmtRx{
     fn receive(received:String);
+    fn singleton() -> &'static Self;
 }
 
 pub trait EgglogTy{
@@ -68,14 +69,6 @@ impl<T:EgglogTy> TyCounter<T>{
     /// 递增计数器
     pub fn inc(&self) -> u32{
         self.counter.fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-    }
-}
-
-pub struct Rx{
-}
-impl LetStmtRx for Rx{
-    fn receive(received:String) {
-        println!("{}",received)
     }
 }
 
