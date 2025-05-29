@@ -15,8 +15,8 @@ use egglog_wrapper::{collect_type_defs, wrap::LetStmtRx, AnimAtom, BRabject, Bez
 fn main() {
     // 创建点
     let p1 = Point::<Rx>::new_fixed_point(&Offset::new_d_vec2(1.0, 1.0));
-    let p2 = Point::<Rx>::new_fixed_point(&Offset::new_d_vec2(1.0, 2.0));
-    let p3 = Point::<Rx>::new_fixed_point(&Offset::new_d_vec2(2.0, 2.0));
+    let p2 = Point::new_fixed_point(&Offset::new_d_vec2(1.0, 2.0));
+    let p3 = Point::new_fixed_point(&Offset::new_d_vec2(2.0, 2.0));
     
     // 创建点集合
     let points = Points::new(vec![&p1, &p2, &p3]);

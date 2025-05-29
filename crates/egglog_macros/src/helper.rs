@@ -196,7 +196,7 @@ pub fn variants_to_ref_node_list(variant:&Variant, name:&Ident) -> Vec<proc_macr
                         _=> panic!()
                     };
                     let name_node = format_ident!("{}",f1_ident);
-                    quote! { &#name_node<T> }
+                    quote! { &#name_node<T, impl EgglogEnumSubTy> }
                 }
             } ;
             let ident = f2;

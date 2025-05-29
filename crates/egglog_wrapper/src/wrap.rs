@@ -20,13 +20,15 @@ pub trait ToEgglog{
 // collect all sorts into inventory, so that we could send the definitions of types.
 inventory::collect!(Sort);
 
+pub trait EgglogEnumSubTy{}
 /// instance of EgglogTy
 #[derive(Debug, Clone, ::derive_more::Deref)]
-pub struct Node<T:EgglogTy, R:LetStmtRx, I:NodeInner<T>>{
+pub struct Node<T:EgglogTy, R:LetStmtRx, I:NodeInner<T> ,S:EgglogEnumSubTy>{
     pub ty : I,
     #[deref]
     pub sym : Sym<T>,
-    pub p: PhantomData<R>
+    pub p: PhantomData<R>,
+    pub s: PhantomData<S>
 }
 
 #[derive(Debug,Clone,derive_more::Deref)]
@@ -72,3 +74,13 @@ impl<T:EgglogTy> TyCounter<T>{
     }
 }
 
+impl EgglogEnumSubTy for (){ }
+impl LetStmtRx for (){
+    fn receive(received:String) {
+        todo!()
+    }
+
+    fn singleton() -> &'static Self {
+        todo!()
+    }
+}
