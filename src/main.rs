@@ -68,11 +68,15 @@ fn main() {
     let seq = Ctl::new_seq(&VecCtl::new(vec![&atom]));
     
     // 构建并行时间线
-    let timeline = Ctl::new_para(&VecCtl::new(vec![&seq]));
+    let s = VecCtl::new(vec![&seq]);
+    let s2 = VecCtl::new(vec![&seq,&seq]);
+    let mut timeline = Ctl::new_para(&s);
+    timeline.set_vec_ctl(&s2);
     
     // 输出到dot文件
     Rx::singleton().to_dot(PathBuf::from("timeline_egraph"));
 }
+
 
 
 

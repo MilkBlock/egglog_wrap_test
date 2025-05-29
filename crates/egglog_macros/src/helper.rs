@@ -161,7 +161,7 @@ pub fn variants_to_sym_list(variant:&Variant) -> Vec<proc_macro2::TokenStream> {
         .collect::<Vec<_>>();
     types_and_idents
 }
-pub fn variants_to_ref_node_list(variant:&Variant, name:&Ident) -> Vec<proc_macro2::TokenStream> {
+pub fn variant_to_ref_node_list(variant:&Variant, name:&Ident) -> Vec<proc_macro2::TokenStream> {
     let types_and_idents = match &variant.fields{
         Fields::Named(fields_named) => {
             fields_named.named.iter()
@@ -196,7 +196,56 @@ pub fn variants_to_ref_node_list(variant:&Variant, name:&Ident) -> Vec<proc_macr
                         _=> panic!()
                     };
                     let name_node = format_ident!("{}",f1_ident);
-                    quote! { &#name_node<T, impl EgglogEnumSubTy> }
+                    quote! { &#name_node<R, impl EgglogEnumSubTy> }
+                }
+            } ;
+            let ident = f2;
+            quote!{ #ident : #node_ty}
+        })
+        .collect::<Vec<_>>();
+    types_and_idents
+}
+pub fn variant_to_mapped_ref_node_list(
+    variant:&Variant, 
+    name:&Ident, 
+    map_basic_ty:impl Fn(&Type)-> TokenStream,
+    map_complex_ty:impl Fn(&Ident)-> TokenStream
+) -> Vec<proc_macro2::TokenStream> {
+    let types_and_idents = match &variant.fields{
+        Fields::Named(fields_named) => {
+            fields_named.named.iter()
+        },
+        Fields::Unit => {
+            panic!("add `{{}}` to the unit variant")
+        },
+        _ => panic!("only support named fields")
+    }
+        .map(|f| { 
+            let f_ident = f.ident.as_ref().expect("don't support unnamed field").clone();
+            // if it's a box type we should read the first generic
+            if is_box_type(&f.ty) {
+                (get_first_generic(&f.ty).clone(), f_ident)
+            }else {
+                (f.ty.clone(), f_ident)
+            }
+        })
+        .map(|(f1,f2)|{
+            let node_ty = match f1.to_token_stream().to_string().as_str(){
+                x if PANIC_TY_LIST.contains(&x) => {
+                    panic!("{} not supported",x)
+                }
+                x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
+                    map_basic_ty(&f1)
+                }
+                _=>{
+                    let f1_ident = match &f1{
+                        Type::Path(type_path) => {
+                            type_path.path.segments.last().expect("impossible").clone().ident
+                        },
+                        _=> panic!()
+                    };
+                    let name_node = format_ident!("{}",f1_ident);
+                    map_complex_ty(&name_node)
                 }
             } ;
             let ident = f2;
@@ -224,7 +273,7 @@ pub fn variants_to_assign_node_field_list(variant:&Variant) -> Vec<proc_macro2::
                 (f.ty.clone(), f_ident)
             }
         })
-        .zip(variants_to_field_ident(variant))
+        .zip(variant_to_field_ident(variant))
         .map(|((f1,f2),ident)|{
             let node_ty = match f1.to_token_stream().to_string().as_str(){
                 x if PANIC_TY_LIST.contains(&x) => {
@@ -243,10 +292,47 @@ pub fn variants_to_assign_node_field_list(variant:&Variant) -> Vec<proc_macro2::
         .collect::<Vec<_>>();
     types_and_idents
 }
+pub fn variants_to_assign_node_field_list_with_out_prefixed_ident(variant:&Variant) -> Vec<proc_macro2::TokenStream> {
+    let types_and_idents = match &variant.fields{
+        Fields::Named(fields_named) => {
+            fields_named.named.iter()
+        },
+        Fields::Unit => {
+            panic!("add `{{}}` to the unit variant")
+        },
+        _ => panic!("only support named fields")
+    }
+        .map(|f| { 
+            let f_ident = f.ident.as_ref().expect("don't support unnamed field").clone();
+            // if it's a box type we should read the first generic
+            if is_box_type(&f.ty) {
+                (get_first_generic(&f.ty).clone(), f_ident)
+            }else {
+                (f.ty.clone(), f_ident)
+            }
+        })
+        .zip(variant_to_field_ident(variant))
+        .map(|((f1,f2),ident)|{
+            let node_ty = match f1.to_token_stream().to_string().as_str(){
+                x if PANIC_TY_LIST.contains(&x) => {
+                    panic!("{} not supported",x)
+                }
+                x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
+                    ident.to_token_stream()
+                }
+                _=>{
+                    quote!(#ident.sym)
+                }
+            } ;
+            quote!{ #node_ty}
+        })
+        .collect::<Vec<_>>();
+    types_and_idents
+}
 
 /// given variant a{ x:X, y:Y} 
 /// return vec![ X, Y ]
-pub fn variants_to_tys(variant:&Variant) -> Vec<Type> {
+pub fn variant_to_tys(variant:&Variant) -> Vec<Type> {
     let tys = match &variant.fields{
         Fields::Named(fields_named) => {
             fields_named.named.iter()
@@ -269,7 +355,7 @@ pub fn variants_to_tys(variant:&Variant) -> Vec<Type> {
 
 /// given variant a{ x:X, y:Y} 
 /// return vec! [ x, y ]
-pub fn variants_to_field_ident(variant:&Variant) -> impl Iterator<Item = &proc_macro2::Ident> {
+pub fn variant_to_field_ident(variant:&Variant) -> impl Iterator<Item = &proc_macro2::Ident> {
     match &variant.fields{
         Fields::Named(fields_named) => {
             fields_named.named.iter()
