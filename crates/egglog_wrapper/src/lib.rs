@@ -1,6 +1,7 @@
 use egglog_macros::egglog_ty;
 pub use derive_more;
 pub mod wrap;
+pub use smallvec;
 
 // Type aliases for Vec types
 #[egglog_ty]
@@ -15,6 +16,7 @@ struct VecHitBox {v:Vec<HitBox>}
 
 #[egglog_ty]
 struct Points { v:Vec<Point>}
+
 
 #[egglog_ty]
 enum Ctl {

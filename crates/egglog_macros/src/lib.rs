@@ -56,9 +56,11 @@ mod helper;
 /// 
 /// 
 #[proc_macro_attribute]
-pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
+pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let name = &input.ident;
+    
+    let name_lowercase = format_ident!("{}",name.to_string().to_lowercase());
     let name_egglogty_impl = format_ident!("{}Ty",name);
     let egglog_wrapper_path = egglog_wrapper_path();
     let inventory_path = inventory_wrapper_path();
@@ -74,8 +76,9 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
                 use #egglog_wrapper_path::wrap::*;
                 impl EgglogTy for #name_egglogty_impl {
                     const TY_NAME:&'static str = stringify!(#name);
-                    const SORT_DEF: #egglog_wrapper_path::wrap::Sort= 
-                        #egglog_wrapper_path::Sort(stringify!(
+                    const TY_NAME_LOWER:&'static str = stringify!(#name_lowercase);
+                    const SORT_DEF: Sort= 
+                        Sort(stringify!(
                             (#name
                                 #(#variants_egglog)*
                             )
@@ -93,8 +96,9 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
                 let vec_expanded = quote! {
                     impl #egglog_wrapper_path::wrap::EgglogTy for #name_egglogty_impl {
                         const TY_NAME:&'static str = stringify!(#name);
-                        const SORT_DEF: #egglog_wrapper_path::wrap::Sort= 
-                            #egglog_wrapper_path::wrap::Sort(stringify!(
+                        const TY_NAME_LOWER:&'static str = stringify!(#name_lowercase);
+                        const SORT_DEF: Sort= 
+                            Sort(stringify!(
                                 (sort #name (Vec #first_generic))
                             ));
                     }
@@ -113,9 +117,9 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
             let name_node_alias = format_ident!("{}NodeAlias",name);
             let name_node = format_ident!("{}",name);
             let name_inner = format_ident!("{}Inner",name);
-            let name_snakecase = format_ident!("{}",name.to_string().to_snake_case());
+            // let name_snakecase = format_ident!("{}",name.to_string().to_snake_case());
             let name_counter = format_ident!("{}_COUNTER",name.to_string().to_uppercase());
-            let derive_more_path  = derive_more_path();
+            // let derive_more_path  = derive_more_path();
             let f = data_struct.fields.iter().nth(0).expect("Struct should only have one Vec field");
             let field_name = &f.ident.as_ref().unwrap();
             let first_generic = get_first_generic(&f.ty);
@@ -132,9 +136,9 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
                         syn::Type::Path(type_path) => {type_path.path.segments.last().expect("impossible").clone().ident},
                         _ => panic!("{} type should be simple path",first_generic.to_token_stream().to_string()),
                     };
-                    let _first_generic_node_alias = format_ident!("{}NodeAlias",first_generic_ident);
+                    let _first_generic = format_ident!("{}",first_generic_ident);
                     // postfix_type(&first_generic,"Node",Some("T")
-                    quote!(#_first_generic_node_alias<R, impl EgglogEnumSubTy>)
+                    quote!(dyn AsRef<#_first_generic<R, ()>>)
                 }
             };
             let field_ty = match first_generic.to_token_stream().to_string().as_str(){
@@ -156,31 +160,44 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
             };
             if is_vec_type(&f.ty){
                 let vec_expanded = quote! {
-                    pub type #name_node_alias<R,S> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,S>;
+                    pub type #name_node_alias<R,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,V>;
 
                     #[derive(Clone,Debug)]
                     pub struct #name_egglogty_impl;
                     #[derive(derive_more::Deref)]
-                    pub struct #name_node<R: LetStmtRx, S: EgglogEnumSubTy=()> {
-                        node:#name_node_alias<R,S>
+                    pub struct #name_node<R: LetStmtRx, V: EgglogEnumVariantTy=()> {
+                        node:#name_node_alias<R,V>
                     }
                     pub struct #name_inner {
-                        v:Vec<#egglog_wrapper_path::wrap::Sym<#field_ty>>
+                        v:#egglog_wrapper_path::wrap::TypedSyms<#field_ty>
                     }
                     const _:() = {
                         use #egglog_wrapper_path::wrap::*;
-                        impl wrap::NodeInner<#name_egglogty_impl> for #name_inner{}
+                        impl NodeInner<#name_egglogty_impl> for #name_inner{}
                         use std::marker::PhantomData;
                         static #name_counter: TyCounter<#name_egglogty_impl> = TyCounter::new();
                         impl<R:LetStmtRx> #name_node<R,()> {
                             pub fn new(#field_name:Vec<&#field_node_ty>) -> #name_node<R,()>{
-                                let v = v.into_iter().map(|r| r.sym).collect::<Vec<_>>();
-                                let node = Node{ ty: #name_inner{v} , sym: #name_counter.next_sym(),p:PhantomData, s:PhantomData};
+                                let #field_name = #field_name.into_iter().map(|r| r.as_ref().sym).collect();
+                                let node = Node{ ty: #name_inner{v:#field_name}, sym: #name_counter.next_sym(),p: PhantomData, s: PhantomData};
+                                let node = #name_node {node};
                                 R::receive(node.to_egglog());
-                                #name_node {node}
+                                node
+                            }
+                            pub fn to_symnode(&self) -> SymbolNode{
+                                SymbolNode{ sym: *self.node.sym , succ:self.node.ty.v.clone().into() , preds: Syms::new()}
                             }
                         }
-                        impl<R:LetStmtRx, S:EgglogEnumSubTy> ToEgglog for #name_node_alias<R,S>{
+                        impl<R: LetStmtRx,  V: EgglogEnumVariantTy> AsRef<#name_node<R, ()>> for #name_node<R, V> {
+                            fn as_ref(&self) -> &#name_node<R, ()> {
+                                unsafe {
+                                    &*(self as *const #name_node<R,V> as *const #name_node<R,()>)
+                                }
+
+                            }
+                        }
+                        
+                        impl<R:LetStmtRx, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>{
                             fn to_egglog(&self) -> String{
                                 format!("(let {} (vec-of {}))",self.sym,self.ty.v.iter().fold("".to_owned(), |s,item| s+item.as_str()+" " ))
                             }
@@ -207,11 +224,11 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
             let _name_node = format_ident!("_{}",name);
             let name_inner = format_ident!("{}Inner",name);
             let name_counter = format_ident!("{}_COUNTER",name.to_string().to_uppercase());
-            let name_snakecase = format_ident!("{}",name.to_string().to_snake_case());
-            let derive_more_path  = derive_more_path();
+            // let name_snakecase = format_ident!("{}",name.to_string().to_snake_case());
+            // let derive_more_path  = derive_more_path();
 
             let variants_def_of_node_with_syms = data_enum.variants.iter().map(|variant|{
-                let types_and_idents = variants_to_sym_list(variant);
+                let types_and_idents = variants_to_sym_typed_ident_list(variant);
                 let variant_name = &variant.ident;
                 quote! {#variant_name {#( #types_and_idents ),*  }}
             }).collect::<Vec<_>>();
@@ -236,17 +253,19 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
                     pub fn #fn_name(#(#ref_node_list),*) -> #name_node<R,#variant_name>{
                         let ty = #name_inner::#variant_name {#(#field_idents),*  };
                         let node = Node { ty, sym: #name_counter.next_sym(), p:PhantomData, s:PhantomData::<#variant_name>};
+                        let node = #name_node {node};
+                        R::add_symnode(node.to_symnode());
                         R::receive(node.to_egglog());
-                        #name_node {node}
+                        node
                     }
                 } 
             });
-            let enum_sub_tys_def = data_enum.variants.iter().map(|variant|{
+            let enum_variant_tys_def = data_enum.variants.iter().map(|variant|{
                 let variant_name = &variant.ident;
                 
                 quote! { 
                     pub struct #variant_name;
-                    impl EgglogEnumSubTy for #variant_name {
+                    impl EgglogEnumVariantTy for #variant_name {
                         const TY_NAME:&'static str = stringify!(#variant_name);
                     }
                 }
@@ -254,7 +273,7 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
 
             let set_fns = data_enum.variants.iter().map(|variant|{
                 let ref_node_list = variant_to_ref_node_list(&variant,&name);
-                let assign_node_field_list = variants_to_assign_node_field_list_with_out_prefixed_ident(&variant);
+                let assign_node_field_list = variants_to_assign_node_field_list_without_prefixed_ident(&variant);
                 let field_idents = variant_to_field_ident(variant).collect::<Vec<_>>();
                 let variant_name = &variant.ident;
 
@@ -269,27 +288,58 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
                                     *#field_ident = ___sym
                                 }
                                 self.node.sym = #name_counter.next_sym();
+                                R::add_symnode(self.to_symnode());
                                 R::receive(self.to_egglog());
                             }
                         }
                     }
                 );
+                let sym_list = variants_to_sym_type_list(variant); 
+                let get_sym_fns = sym_list.iter().zip(field_idents.iter()
+                    ).map(
+                    |(sym,field_ident)|{
+                        let get_fn_name = format_ident!("{}_sym",field_ident);
+                        quote! {
+                            pub fn #get_fn_name(&self) -> #sym{
+                                if let #name_inner::#variant_name{ #(#field_idents),*} = &self.node.ty{
+                                    #field_ident.clone()
+                                }else{
+                                    panic!()
+                                }
+                            }
+                        }
+                    }
+                );
+
+                let vec_needed_syms = 
+                    variant_to_field_list_without_prefixed_ident_filter_out_basic_ty(variant)
+                    .into_iter()
+                    .map(|x| format_ident!("{}_sym",x.to_string()));
                 
                 quote! { 
                     impl<R:LetStmtRx> #name_node<R,#variant_name>{
                         #(
                             #set_fns
                         )*
+                        #(
+                            #get_sym_fns
+                        )*
+                        pub fn to_symnode(&self) -> SymbolNode{
+                            SymbolNode{ sym: *self.node.sym , succ: smallvec::smallvec![
+                                #(*self.#vec_needed_syms()),*
+                            ].into() , preds: Syms::new()}
+                        }
+
                     }
                 } 
             });
 
             // let match_arm_fields = variants_to_field_ident(&variant);
             let expanded = quote! {
-                pub type #name_node_alias<R,S> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,S>;
+                pub type #name_node_alias<R,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,V>;
                 #[derive(derive_more::Deref)]
-                pub struct #name_node<R: LetStmtRx,S:EgglogEnumSubTy=()> {
-                    node:#name_node_alias<R,S>
+                pub struct #name_node<R: LetStmtRx,V:EgglogEnumVariantTy=()> {
+                    node:#name_node_alias<R,V>
                 }
                 #[derive(Debug,Clone)]
                 pub struct #name_egglogty_impl;
@@ -300,14 +350,21 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
                 const _:() = {
                     use std::marker::PhantomData;
                     use #egglog_wrapper_path::*;
-                    #(#enum_sub_tys_def)*
+                    #(#enum_variant_tys_def)*
                     impl<R:LetStmtRx> #name_node<R,()> {
                         #(#fns)*
                     }
-                    impl<R:LetStmtRx, S:EgglogEnumSubTy> ToEgglog for #name_node_alias<R,S>{
+                    impl<R:LetStmtRx, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>{
                         fn to_egglog(&self) -> String{
-                            match &self.ty{
+                            match &self.node.ty{
                                 #(#match_arms),*
+                            }
+                        }
+                    }
+                    impl<R: LetStmtRx,  V: EgglogEnumVariantTy> AsRef<#name_node<R, ()>> for #name_node<R, V> {
+                        fn as_ref(&self) -> &#name_node<R, ()> {
+                            unsafe {
+                                &*(self as *const #name_node<R,V> as *const #name_node<R,()>)
                             }
                         }
                     }
@@ -327,3 +384,9 @@ pub fn egglog_ty(attr: TokenStream, item:TokenStream) -> TokenStream {
         }
     )
 }
+
+// impl<R: LetStmtRx,  V: EgglogEnumVariantTy> AsRef<#name_node<R, ()>> for #name_node<R, V> {
+//     fn as_ref(&self) -> &#name_node_alias<R, ()> {
+//         self.node.as_ref()
+//     }
+// }
