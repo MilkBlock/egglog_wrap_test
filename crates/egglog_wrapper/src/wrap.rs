@@ -189,12 +189,12 @@ impl LetStmtRx for Rx{
     }
 
     fn add_symnode(symnode:SymbolNode){
-        let mut guard = Self::singleton().inner.lock().unwrap();
-        for node in &symnode.succ{
-            guard.map.get_mut(node)
-                .unwrap_or_else(||panic!("node {} not found", node.as_str())).preds.push(symnode.sym);
-        }
-        guard.map.insert(symnode.sym, symnode);
+        // let mut guard = Self::singleton().inner.lock().unwrap();
+        // for node in &symnode.succ{
+        //     guard.map.get_mut(node)
+        //         .unwrap_or_else(||panic!("node {} not found", node.as_str())).preds.push(symnode.sym);
+        // }
+        // guard.map.insert(symnode.sym, symnode);
     }
 
 
