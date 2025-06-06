@@ -1,8 +1,9 @@
-use std::{borrow::Borrow, fmt, hash::Hash, marker::PhantomData, path::PathBuf, sync::{atomic::AtomicU32, Mutex, OnceLock}};
+use std::{borrow::Borrow, collections::VecDeque, fmt, hash::Hash, marker::PhantomData, path::PathBuf, sync::{atomic::AtomicU32, Mutex, OnceLock}};
+use dashmap::DashMap;
 use derive_more::{Debug, Deref, DerefMut, IntoIterator};
 use egglog::{util::{IndexMap, IndexSet}, EGraph, SerializeConfig};
 use smallvec::SmallVec;
-use symbol_table::GlobalSymbol;
+use symbol_table::{GlobalSymbol, Symbol};
 use bevy_ecs::world::World;
 
 use crate::collect_type_defs;
@@ -12,6 +13,8 @@ pub trait LetStmtRx:'static{
     fn singleton() -> &'static Self;
     fn add_symnode(symnode:SymbolNode);
     fn update_symnode(old:Sym,symnode:SymbolNode);
+    fn update_symnodes(iter:impl Iterator<Item=(Sym,SymbolNode)>);
+    fn locate_latest(old:&mut Sym) -> Sym;
 }
 
 pub trait EgglogTy{
@@ -25,7 +28,7 @@ pub trait UpdateCounter<T:EgglogTy>{
 pub struct Sort(pub &'static str);
 
 pub trait ToEgglog{
-    fn to_egglog(&self) -> String;
+    fn to_egglog(&mut self) -> String;
 }
 pub trait EgglogNode:ToEgglog {
     fn succs_mut(&mut self)-> Vec<&mut Sym>;
@@ -34,6 +37,8 @@ pub trait EgglogNode:ToEgglog {
     fn next_sym(&mut self) -> Sym;
     // return current sym 
     fn cur_sym(&self) -> Sym;
+
+    fn clone_dyn(&self) -> Box<dyn EgglogNode>;
 }
 
 // collect all sorts into inventory, so that we could send the definitions of types.
@@ -154,14 +159,28 @@ impl LetStmtRx for (){
     fn update_symnode(_:Sym,_:SymbolNode) {
         todo!()
     }
+    
+    fn update_symnodes(iter:impl Iterator<Item=(Sym,SymbolNode)>) {
+        todo!()
+    }
+    
+    fn locate_latest(old:&mut Sym) -> Sym {
+        todo!()
+    }
 }
 
 #[derive(DerefMut,Deref)]
 pub struct SymbolNode{
+    next : Option<Sym>,
     preds : Syms,
     #[deref]
     #[deref_mut]
     egglog : Box<dyn EgglogNode>,
+}
+impl Clone for SymbolNode{
+    fn clone(&self) -> Self {
+        Self { next: self.next.clone(), preds: self.preds.clone(), egglog: self.egglog.clone_dyn() }
+    }
 }
 impl fmt::Debug for SymbolNode{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -177,6 +196,7 @@ impl SymbolNode{
         Self{
             preds: Syms::default(),
             egglog: node,
+            next: None,
         }
     }
     pub fn succs_mut(&mut self) -> impl Iterator<Item = &mut Sym>{
@@ -201,7 +221,6 @@ impl SymbolNode{
 #[derive(Deref,DerefMut)]
 pub struct RxInner{ 
     egraph: EGraph,
-    map : IndexMap<Sym, SymbolNode>,
     #[deref] #[deref_mut]
     world : World,
 }
@@ -212,7 +231,8 @@ impl Borrow<GlobalSymbol> for Sym{
 }
 
 pub struct Rx{
-    inner:Mutex<RxInner>
+    inner : Mutex<RxInner>,
+    map : DashMap<Sym,SymbolNode>
 }
 impl Rx{
     pub fn interpret(&self,s:String){
@@ -245,19 +265,24 @@ impl Rx{
             .unwrap_or_else(|_| panic!("Failed to write dot file to {dot_path:?}"));
     }
     // collect all ancestors of cur_sym, without cur_sym
-    pub fn collect_symnode(cur_sym:Sym, map:&mut IndexMap<Sym,SymbolNode>,index_set:&mut IndexSet<Sym>){
-        let sym_node = map.get(&cur_sym).unwrap();
-        for pred in sym_node.preds().cloned().collect::<Vec<_>>(){
-            if index_set.contains(&pred){
+    pub fn collect_symnode(cur_sym:Sym, index_set:&mut IndexSet<Sym>){
+        let singleton = Self::singleton();
+        let sym_node = singleton.map.get(&cur_sym).unwrap();
+        let v = sym_node.preds().cloned().collect::<Vec<_>>();
+        drop(sym_node);
+        for pred in v{
+            if index_set.contains(&pred) || singleton.map.get(&pred).unwrap().next.is_some(){
                 // do nothing
             }else {
                 index_set.insert(pred.clone());
-                Rx::collect_symnode(pred,map,index_set)
+                Rx::collect_symnode(pred,index_set)
             }
         }
     }
     /// start node is asserted to be zero input degree 
-    pub fn topo_sort(start : Sym ,map:&IndexMap<Sym,SymbolNode>,index_set:&IndexSet<Sym>)-> Vec<Sym>{
+    pub fn topo_sort(starts : IndexSet<Sym> ,index_set:&IndexSet<Sym>)-> Vec<Sym>{
+        let singleton = Self::singleton();
+        let map = &singleton.map;
         // init in degrees and out degrees 
         let mut ins = Vec::new();
         let mut outs = Vec::new();
@@ -265,21 +290,29 @@ impl Rx{
         outs.resize(index_set.len(), 0);
         for (i,(in_degree,out_degree)) in ins.iter_mut().zip(outs.iter_mut()).enumerate(){
             let sym = index_set[i];
+            print!("{} ",sym);
             *in_degree = Rx::degree_in_subgraph(map.get(&sym).unwrap().preds().into_iter().map(|x|*x), index_set);
             *out_degree = Rx::degree_in_subgraph(map.get(&sym).unwrap().succs().into_iter(), index_set);
         }
-        // start node should not have any out edges in subgraph
-        assert_eq!(0, outs[index_set.get_index_of(&start).unwrap()]);
+            println!("");
         let mut rst = Vec::new();
-        rst.push(start);
-        while rst.len() != index_set.len(){
-            for target in &map.get(rst.last().unwrap()).unwrap().preds {
+        let mut wait_for_release = Vec::new();
+        // start node should not have any out edges in subgraph
+        for start in starts{
+            assert_eq!(0, outs[index_set.get_index_of(&start).unwrap()]);
+            wait_for_release.push(start);
+        }
+        while !wait_for_release.is_empty(){
+            let popped = wait_for_release.pop().unwrap();
+            for target in &map.get(&popped).unwrap().preds {
                 let idx = index_set.get_index_of(target).unwrap();
                 outs[idx] -= 1;
+                println!("{:?}",outs);
                 if outs[idx] == 0{
-                    rst.push(*target);
+                    wait_for_release.push(*target);
                 }
             }
+            rst.push(popped);;
         }
         rst
     }
@@ -294,46 +327,69 @@ unsafe impl Send for Rx{ }
 unsafe impl Sync for Rx{ }
 // MARK: Receiver
 impl LetStmtRx for Rx{
+    /// locate the lastest version of the symbol
+    fn locate_latest(old:&mut Sym) -> Sym{
+        let map = &Self::singleton().map;
+        let mut cur = *old;
+        while let Some(newer) = map.get(&cur).unwrap().next{
+            cur = newer;
+        }
+        *old = cur;
+        cur
+    }
     fn receive(received:String) {
         Self::singleton().interpret(received);
     }
 
     fn add_symnode(mut symnode:SymbolNode){
-        let mut guard = Self::singleton().inner.lock().unwrap();
+        let singleton = Self::singleton();
+        let mut guard = singleton.inner.lock().unwrap();
         let sym = symnode.cur_sym();
         for node in symnode.succs_mut(){
-            guard.map.get_mut(node)
+            let node = &Rx::locate_latest( node);
+            singleton.map.get_mut(node)
                 .unwrap_or_else(||panic!("node {} not found", node.as_str()))
                 .preds.push(sym);
         }
-        guard.map.insert(symnode.cur_sym(), symnode);
+        singleton.map.insert(symnode.cur_sym(), symnode);
     }
 
     /// update all predecessor recursively in guest and send updated term by egglog repr to host
     /// when you update the node
-    fn update_symnode(old:Sym, mut updated_symnode:SymbolNode){
+    fn update_symnode(mut old:Sym, mut updated_symnode:SymbolNode){
         let mut index_set = IndexSet::default();
-        let mut guard = Self::singleton().inner.lock().unwrap();
+        let singleton = Self::singleton();
+        let mut guard = singleton.inner.lock().unwrap();
+
+        let old = Rx::locate_latest(&mut old);
 
         // collect all syms that will change
-        Rx::collect_symnode(old,&mut guard.map, &mut index_set);
-        let old_node = guard.map.swap_remove(&old).unwrap();
-        updated_symnode.preds = old_node.preds;
+        Rx::collect_symnode(old, &mut index_set);
+        let mut old_node = singleton.map.get_mut(&old).unwrap();
+        // chain old version and new version
+        old_node.next = Some(updated_symnode.egglog.cur_sym());
+        println!("set {} some",old_node.cur_sym());
+        updated_symnode.preds = old_node.preds.clone();
         let mut new_syms = vec![];
         // update all succs
         for &old_sym in index_set.iter(){
-            let mut sym_node = guard.map.swap_remove(&old_sym).unwrap();
+            let mut sym_node = singleton.map.get(&old_sym).unwrap().clone();
             let new_sym = sym_node.next_sym();
+
+            // chain old version and new version
+            singleton.map.get_mut(&old_sym).unwrap().next = Some(new_sym);
+            println!("set {} some",old_sym);
+
             new_syms.push(new_sym);
-            guard.map.insert(new_sym, sym_node);
+            singleton.map.insert(new_sym, sym_node);
         }
         index_set.insert(old);
         let new_sym = updated_symnode.cur_sym();
         new_syms.push(updated_symnode.cur_sym());
-        guard.map.insert(updated_symnode.cur_sym() ,updated_symnode);
+        singleton.map.insert(updated_symnode.cur_sym() ,updated_symnode);
         // update all preds
         for &new_sym in &new_syms{
-            let sym_node = guard.map.get_mut(&new_sym).unwrap();
+            let mut sym_node = singleton.map.get_mut(&new_sym).unwrap();
             for sym in sym_node.preds_mut(){
                 if let Some(idx) =  index_set.get_index_of(&*sym){
                     *sym = new_syms[idx];
@@ -346,9 +402,11 @@ impl LetStmtRx for Rx{
             }
         }
         let mut s = "".to_owned();
-        let topo = Rx::topo_sort(new_sym, &guard.map, &IndexSet::from_iter(new_syms.into_iter()));
+        let topo = Rx::topo_sort(
+            IndexSet::from_iter(Some(new_sym).into_iter()),
+            &IndexSet::from_iter(new_syms.into_iter()));
         for new_sym in topo{
-            s += guard.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
+            s += singleton.map.get_mut(&new_sym).unwrap().egglog.to_egglog().as_str();
         }
         drop(guard);
         Rx::receive(s);
@@ -366,12 +424,62 @@ impl LetStmtRx for Rx{
                         e.parse_and_run_program(None, type_defs.as_ref()).unwrap();
                         e
                     },
-                    map: IndexMap::default(),
                     world: World::new(),
-                })
+                }),
+                map: DashMap::default(),
             }
         })
     }
+    
+    fn update_symnodes(start_iter:impl Iterator<Item=(Sym,SymbolNode)>) {}
+        
+    //     let mut index_set = IndexSet::default();
+    //     let mut starts_and_update = IndexMap::default();
+    //     let mut guard = Self::singleton().inner.lock().unwrap();
+
+    //     // collect all syms that will change
+    //     for (old,updated_symnode) in start_iter{
+    //         starts_and_update.insert(old,updated_symnode);
+    //         Rx::collect_symnode(old, &mut guard.map, &mut index_set);
+    //         let old_node = guard.map.swap_remove(&old).unwrap();
+    //         updated_symnode.preds = old_node.preds;
+    //     }
+    //     let mut new_syms = vec![];
+    //     // update relevant nodes to next version
+    //     for &old_sym in index_set.iter(){
+    //         let mut sym_node = guard.map.swap_remove(&old_sym).unwrap();
+    //         let new_sym = sym_node.next_sym();
+    //         new_syms.push(new_sym);
+    //         guard.map.insert(new_sym, sym_node);
+    //     }
+    //     let new_sym = updated_symnode.cur_sym();
+    //     new_syms.push(updated_symnode.cur_sym());
+    //     guard.map.insert(updated_symnode.cur_sym() ,updated_symnode);
+    //     // update all preds & succs
+    //     for &new_sym in &new_syms{
+    //         let sym_node = guard.map.get_mut(&new_sym).unwrap();
+    //         for sym in sym_node.preds_mut(){
+    //             if let Some(idx) =  index_set.get_index_of(&*sym){
+    //                 *sym = new_syms[idx];
+    //             }
+    //         }
+    //         for sym in sym_node.succs_mut(){
+    //             if let Some(idx) =  index_set.get_index_of(&*sym){
+    //                 *sym = new_syms[idx];
+    //             }
+    //         }
+    //     }
+    //     let mut s = "".to_owned();
+    //     let topo = Rx::topo_sort(
+    //         IndexSet::from_iter(Some(new_sym).into_iter()),
+    //         &guard.map,
+    //         &IndexSet::from_iter(new_syms.into_iter()));
+    //     for new_sym in topo{
+    //         s += guard.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
+    //     }
+    //     drop(guard);
+    //     Rx::receive(s);
+    // }
 }
 
 

@@ -265,14 +265,11 @@ pub fn variant_to_ref_node_list(variant:&Variant, _:&Ident) -> Vec<proc_macro2::
         .collect::<Vec<_>>();
     types_and_idents
 }
-#[allow(unused)]
-pub fn variant_to_mapped_ref_node_list(
+pub fn variant_to_mapped_ident_list(
     variant:&Variant, 
-    name:&Ident, 
-    map_basic_ty:impl Fn(&Type)-> TokenStream,
+    map_basic_ty:impl Fn(&Ident)-> TokenStream,
     map_complex_ty:impl Fn(&Ident)-> TokenStream
 ) -> Vec<proc_macro2::TokenStream> {
-    let _ = name;
     let types_and_idents = match &variant.fields{
         Fields::Named(fields_named) => {
             fields_named.named.iter()
@@ -292,26 +289,18 @@ pub fn variant_to_mapped_ref_node_list(
             }
         })
         .map(|(f1,f2)|{
-            let node_ty = match f1.to_token_stream().to_string().as_str(){
+            let mapped_ident = match f1.to_token_stream().to_string().as_str(){
                 x if PANIC_TY_LIST.contains(&x) => {
                     panic!("{} not supported",x)
                 }
                 x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
-                    map_basic_ty(&f1)
+                    map_basic_ty(&f2)
                 }
                 _=>{
-                    let f1_ident = match &f1{
-                        Type::Path(type_path) => {
-                            type_path.path.segments.last().expect("impossible").clone().ident
-                        },
-                        _=> panic!()
-                    };
-                    let name_node = format_ident!("{}",f1_ident);
-                    map_complex_ty(&name_node)
+                    map_complex_ty(&f2)
                 }
             } ;
-            let ident = f2;
-            quote!{ #ident : #node_ty}
+            quote!{  #mapped_ident}
         })
         .collect::<Vec<_>>();
     types_and_idents
@@ -454,7 +443,9 @@ pub fn variant_to_tys(variant:&Variant) -> Vec<Type> {
 
 /// given variant a{ x:X, y:Y} 
 /// return vec! [ x, y ]
-pub fn variant_to_field_ident(variant:&Variant) -> impl Iterator<Item = &proc_macro2::Ident> {
+pub fn variant_to_field_ident(
+    variant:&Variant, 
+) -> impl Iterator<Item = &proc_macro2::Ident> {
     match &variant.fields{
         Fields::Named(fields_named) => {
             fields_named.named.iter()
