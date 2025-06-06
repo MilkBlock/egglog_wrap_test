@@ -21,7 +21,7 @@ fn main(){
     let node1 = Cons::new_value(3, &Cons::<Rx>::new_end());
     let node2 = Cons::new_value(2, &node1);
     let node3 = Cons::new_value(1, &node2);
-    let root = Root::new_v(&VecCon::new(vec![&node1,&node2]));
+    let root = Root::new_v(&VecCon::new(vec![&node1,&node2,&node3]));
     {node2};
     let m = root.as_str();
     // 事实上你没法根据symbol really?

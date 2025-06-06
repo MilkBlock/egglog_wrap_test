@@ -22,6 +22,7 @@ pub fn egglog_wrapper_path() -> proc_macro2::TokenStream {
         _ => quote!(::egglog),
     }
 }
+#[allow(unused)]
 pub fn smallvec_wrapper_path() -> proc_macro2::TokenStream {
     match (
         crate_name("smallvec"),
@@ -35,6 +36,7 @@ pub fn smallvec_wrapper_path() -> proc_macro2::TokenStream {
         _ => quote!(::smallvec),
     }
 }
+#[allow(unused)]
 pub fn derive_more_path() -> proc_macro2::TokenStream {
     match (
         crate_name("derive_more"),
@@ -69,6 +71,7 @@ pub fn derive_more_path() -> proc_macro2::TokenStream {
 //         _ => panic!("Unsupported type for `WithSymNode`"),
 //     }
 // }
+#[allow(unused)]
 pub fn get_ref_type(ty: &Type) -> proc_macro2::TokenStream {
     match ty {
         Type::Path(type_path) => {
@@ -193,7 +196,7 @@ pub fn variants_to_sym_type_list(variant:&Variant) -> Vec<proc_macro2::TokenStre
                 (f.ty.clone(), f_ident)
             }
         })
-        .map(|(f1,f2)|{
+        .map(|(f1,_)|{
             let sym_ty = match f1.to_token_stream().to_string().as_str(){
                 x if PANIC_TY_LIST.contains(&x) => {
                     panic!("{} not supported",x)
@@ -218,7 +221,7 @@ pub fn variants_to_sym_type_list(variant:&Variant) -> Vec<proc_macro2::TokenStre
         .collect::<Vec<_>>();
     types
 }
-pub fn variant_to_ref_node_list(variant:&Variant, name:&Ident) -> Vec<proc_macro2::TokenStream> {
+pub fn variant_to_ref_node_list(variant:&Variant, _:&Ident) -> Vec<proc_macro2::TokenStream> {
     let types_and_idents = match &variant.fields{
         Fields::Named(fields_named) => {
             fields_named.named.iter()
@@ -262,6 +265,7 @@ pub fn variant_to_ref_node_list(variant:&Variant, name:&Ident) -> Vec<proc_macro
         .collect::<Vec<_>>();
     types_and_idents
 }
+#[allow(unused)]
 pub fn variant_to_mapped_ref_node_list(
     variant:&Variant, 
     name:&Ident, 
@@ -370,7 +374,7 @@ pub fn variants_to_assign_node_field_list_without_prefixed_ident(variant:&Varian
             }
         })
         .zip(variant_to_field_ident(variant))
-        .map(|((f1,f2),ident)|{
+        .map(|((f1,_),ident)|{
             let node_ty = match f1.to_token_stream().to_string().as_str(){
                 x if PANIC_TY_LIST.contains(&x) => {
                     panic!("{} not supported",x)
@@ -407,7 +411,7 @@ pub fn variant_to_field_list_without_prefixed_ident_filter_out_basic_ty(variant:
             }
         })
         .zip(variant_to_field_ident(variant))
-        .filter_map(|((f1,f2),ident)|{
+        .filter_map(|((f1,_f2),ident)|{
             let node_ty = match f1.to_token_stream().to_string().as_str(){
                 x if PANIC_TY_LIST.contains(&x) => {
                     panic!("{} not supported",x)

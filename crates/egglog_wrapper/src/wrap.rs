@@ -1,9 +1,9 @@
-use std::{borrow::Borrow, collections::VecDeque, fmt, hash::Hash, marker::PhantomData, path::PathBuf, sync::{atomic::AtomicU32, Mutex, OnceLock}};
+use std::{borrow::Borrow, fmt, hash::Hash, marker::PhantomData, path::PathBuf, sync::{atomic::AtomicU32, Mutex, OnceLock}};
 use derive_more::{Debug, Deref, DerefMut, IntoIterator};
 use egglog::{util::{IndexMap, IndexSet}, EGraph, SerializeConfig};
 use smallvec::SmallVec;
-use symbol_table::{GlobalSymbol, Symbol};
-use bevy_ecs::world::{self, World};
+use symbol_table::GlobalSymbol;
+use bevy_ecs::world::World;
 
 use crate::collect_type_defs;
 
@@ -151,7 +151,7 @@ impl LetStmtRx for (){
         todo!()
     }
     
-    fn update_symnode(old:Sym,symnode:SymbolNode) {
+    fn update_symnode(_:Sym,_:SymbolNode) {
         todo!()
     }
 }
@@ -173,7 +173,7 @@ impl fmt::Debug for SymbolNode{
     }
 }
 impl SymbolNode{
-    pub fn new(sym:Sym, node:Box<dyn EgglogNode>) -> Self{
+    pub fn new(_:Sym, node:Box<dyn EgglogNode>) -> Self{
         Self{
             preds: Syms::default(),
             egglog: node,
@@ -246,7 +246,6 @@ impl Rx{
     }
     // collect all ancestors of cur_sym, without cur_sym
     pub fn collect_symnode(cur_sym:Sym, map:&mut IndexMap<Sym,SymbolNode>,index_set:&mut IndexSet<Sym>){
-        println!("start collect symnode");
         let sym_node = map.get(&cur_sym).unwrap();
         for pred in sym_node.preds().cloned().collect::<Vec<_>>(){
             if index_set.contains(&pred){
@@ -274,9 +273,7 @@ impl Rx{
         let mut rst = Vec::new();
         rst.push(start);
         while rst.len() != index_set.len(){
-            // println!("{:?}",rst);
             for target in &map.get(rst.last().unwrap()).unwrap().preds {
-                // println!("{}",target);
                 let idx = index_set.get_index_of(target).unwrap();
                 outs[idx] -= 1;
                 if outs[idx] == 0{
@@ -298,13 +295,10 @@ unsafe impl Sync for Rx{ }
 // MARK: Receiver
 impl LetStmtRx for Rx{
     fn receive(received:String) {
-        // println!("receving");
         Self::singleton().interpret(received);
-        // println!("after receving");
     }
 
     fn add_symnode(mut symnode:SymbolNode){
-        println!("add symnode ");
         let mut guard = Self::singleton().inner.lock().unwrap();
         let sym = symnode.cur_sym();
         for node in symnode.succs_mut(){
@@ -318,13 +312,11 @@ impl LetStmtRx for Rx{
     /// update all predecessor recursively in guest and send updated term by egglog repr to host
     /// when you update the node
     fn update_symnode(old:Sym, mut updated_symnode:SymbolNode){
-        println!("update symnode {} to be {:?}",old.as_str(),updated_symnode );
         let mut index_set = IndexSet::default();
         let mut guard = Self::singleton().inner.lock().unwrap();
 
         // collect all syms that will change
         Rx::collect_symnode(old,&mut guard.map, &mut index_set);
-        println!("collected {:?}",index_set);
         let old_node = guard.map.swap_remove(&old).unwrap();
         updated_symnode.preds = old_node.preds;
         let mut new_syms = vec![];
@@ -332,7 +324,6 @@ impl LetStmtRx for Rx{
         for &old_sym in index_set.iter(){
             let mut sym_node = guard.map.swap_remove(&old_sym).unwrap();
             let new_sym = sym_node.next_sym();
-            println!("update to new sym from {} to {}",old_sym.as_str(),new_sym);
             new_syms.push(new_sym);
             guard.map.insert(new_sym, sym_node);
         }
@@ -342,37 +333,25 @@ impl LetStmtRx for Rx{
         guard.map.insert(updated_symnode.cur_sym() ,updated_symnode);
         // update all preds
         for &new_sym in &new_syms{
-            println!("update pred {}",new_sym.as_str());
             let sym_node = guard.map.get_mut(&new_sym).unwrap();
-            print!("preds: ",);
             for sym in sym_node.preds_mut(){
                 if let Some(idx) =  index_set.get_index_of(&*sym){
                     *sym = new_syms[idx];
                 }
-                print!("{}",sym);
             }
-            println!("");
-            print!("succs: ");
             for sym in sym_node.succs_mut(){
                 if let Some(idx) =  index_set.get_index_of(&*sym){
                     *sym = new_syms[idx];
                 }
-                print!("{}",sym);
             }
-            println!("");
         }
-        // for (k,v) in &guard.map{
-        //     println!("{} {} {:?} ", v.egglog.to_egglog(), k.as_str(),v.preds,);
-        // }
         let mut s = "".to_owned();
         let topo = Rx::topo_sort(new_sym, &guard.map, &IndexSet::from_iter(new_syms.into_iter()));
         for new_sym in topo{
-            println!("iter new {}",new_sym.as_str());
             s += guard.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
         }
-        {guard};
+        drop(guard);
         Rx::receive(s);
-        // println!("finish update_symnode");
     }
     
     fn singleton() -> &'static Self {
@@ -401,9 +380,6 @@ pub struct Syms<T=()>{
     #[into_iterator(owned, ref,  ref_mut)]
     inner:SmallVec<[Sym<T>;4]>
 }
-
-trait Unit {}
-impl Unit for (){}
 
 impl From<SmallVec<[Sym;4]>> for Syms {
     fn from(value: SmallVec<[Sym;4]>) -> Self {
