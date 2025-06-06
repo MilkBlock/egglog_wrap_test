@@ -1,16 +1,6 @@
-use std::{borrow::{Borrow, Cow}, ops::Deref, path::PathBuf, str::FromStr, sync::Mutex};
-use std::sync::OnceLock;
+use std::path::PathBuf;
 
-use egglog::{ast::{Parser, Symbol}, *};
-use egglog_wrapper::{collect_type_defs, wrap::{LetStmtRx, Rx}, AnimAtom, BRabject, BezierPathBuilder, BuiltinF, Color, Ctl, Duration, Fn, Offset, Path, Point, Points, RateCfg, Shape, VecCtl, VecWF, Weight, WeightedFn};
-// fn main() {
-//     let p1 = Point::<Rx>::new_fixed_point(&Offset::new_d_vec2(1.0, 0.));
-//     let p2 = Point::new_fixed_point(&Offset::new_d_vec2(1.0, 2.));
-//     let ps = Points::new(vec![&p1,&p2]);
-//     Shape::new_polygon(points)
-//     Rx::singleton().to_dot(PathBuf::from("egraph"));
-// }
-// use your_crate_name::*; // 请替换为实际的crate名
+use egglog_wrapper::{wrap::{LetStmtRx, Rx}, AnimAtom, BRabject,BRabjectInstance, BezierPathBuilder, BuiltinF, Color, Ctl, Duration, Fn, Offset, Path, Point, Points, RateCfg, Shape, VecCtl, VecWF, Weight, WeightedFn};
 
 fn main() {
     // 创建点
@@ -29,6 +19,7 @@ fn main() {
         &triangle_shape,
         &Color::new_srgba(1.0, 0.0, 0.0, 1.0)
     );
+    let triangle_instance = BRabjectInstance::new_instance(&triangle);
     
     // 创建当前锚点
     let cur_anchor = Point::new_cur_anchor_of(&triangle);
@@ -54,7 +45,7 @@ fn main() {
     
     // 创建动画原子
     let anim_atom = AnimAtom::new_anim(
-        &triangle,
+        &triangle_instance,
         &path,
         &Duration::new_duration_by_secs(3.0),
         &RateCfg::new_rate_fn(&VecWF::new(vec![

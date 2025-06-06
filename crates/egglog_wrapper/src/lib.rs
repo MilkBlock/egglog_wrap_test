@@ -28,25 +28,31 @@ enum Ctl {
 #[egglog_ty]
 enum AnimAtom {
     Anim {
-        object: BRabject,
+        object: BRabjectInstance,
         path: Path,
         duration: Duration,
         rate_cfg: RateCfg,
     },
     ConstructAnim {
-        from: BRabject,
+        from: BRabjectInstance,
         to: BRabject,
         path: Path,
         duration: Duration,
         rate_cfg: RateCfg,
     },
     DestructAnim {
-        from: BRabject,
+        from: BRabjectInstance,
         to: BRabject,
         path: Path,
         duration: Duration,
         rate_cfg: RateCfg,
     },
+}
+#[egglog_ty]
+enum BRabjectInstance{
+    Instance {
+        template:BRabject,
+    }
 }
 
 #[egglog_ty]

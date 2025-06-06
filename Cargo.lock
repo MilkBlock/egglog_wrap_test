@@ -591,6 +591,7 @@ dependencies = [
 name = "egglog_wrapper"
 version = "0.1.0"
 dependencies = [
+ "bevy_ecs",
  "derive_more 2.0.1",
  "egglog",
  "egglog_macros",

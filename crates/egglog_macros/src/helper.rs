@@ -4,7 +4,7 @@ use core::panic;
 use proc_macro2::{Span, TokenStream,Ident};
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote, ToTokens};
-use syn::{Fields, GenericArgument, PathArguments, Type, TypeReference, Variant};
+use syn::{Fields, GenericArgument, PathArguments, Type, Variant};
 
 pub const PANIC_TY_LIST:[&'static str;4] = ["i32","u32","u64","f32"];
 pub const EGGLOG_BASIC_TY_LIST:[&'static str;3] = ["String","i64","f64"];
@@ -213,7 +213,6 @@ pub fn variants_to_sym_type_list(variant:&Variant) -> Vec<proc_macro2::TokenStre
                 }
 
             } ;
-            let ident = f2;
             quote!{ #sym_ty}
         })
         .collect::<Vec<_>>();
@@ -269,6 +268,7 @@ pub fn variant_to_mapped_ref_node_list(
     map_basic_ty:impl Fn(&Type)-> TokenStream,
     map_complex_ty:impl Fn(&Ident)-> TokenStream
 ) -> Vec<proc_macro2::TokenStream> {
+    let _ = name;
     let types_and_idents = match &variant.fields{
         Fields::Named(fields_named) => {
             fields_named.named.iter()
