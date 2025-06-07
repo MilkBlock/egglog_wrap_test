@@ -160,7 +160,7 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                         }
                         fn locate_latest(&mut self){
                             R::locate_latest(self.node.sym.detype_mut());
-                            self.node.ty.v.iter_mut().map(|item| R::locate_latest(item.detype_mut()));
+                            self.node.ty.v.iter_mut().for_each(|item| {R::locate_latest(item.detype_mut());});
                         }
                     }
                 }

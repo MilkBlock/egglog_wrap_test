@@ -1,9 +1,9 @@
-use std::{borrow::Borrow, collections::VecDeque, fmt, hash::Hash, marker::PhantomData, path::PathBuf, sync::{atomic::AtomicU32, Mutex, OnceLock}};
+use std::{borrow::Borrow, fmt, hash::Hash, marker::PhantomData, path::PathBuf, sync::{atomic::AtomicU32, Mutex, OnceLock}};
 use dashmap::DashMap;
 use derive_more::{Debug, Deref, DerefMut, IntoIterator};
-use egglog::{util::{IndexMap, IndexSet}, EGraph, SerializeConfig};
+use egglog::{util::IndexSet, EGraph, SerializeConfig};
 use smallvec::SmallVec;
-use symbol_table::{GlobalSymbol, Symbol};
+use symbol_table::GlobalSymbol;
 use bevy_ecs::world::World;
 
 use crate::collect_type_defs;
@@ -163,11 +163,11 @@ impl LetStmtRx for (){
         todo!()
     }
     
-    fn update_symnodes(iter:impl Iterator<Item=(Sym,SymbolNode)>) {
+    fn update_symnodes(_:impl Iterator<Item=(Sym,SymbolNode)>) {
         todo!()
     }
     
-    fn locate_latest(old:&mut Sym) -> Sym {
+    fn locate_latest(_:&mut Sym) -> Sym {
         todo!()
     }
 }
@@ -292,12 +292,10 @@ impl Rx{
         outs.resize(index_set.len(), 0);
         for (i,(in_degree,out_degree)) in ins.iter_mut().zip(outs.iter_mut()).enumerate(){
             let sym = index_set[i];
-            print!("{} ",sym);
             let node = map.get(&sym).unwrap();
             *in_degree = Rx::degree_in_subgraph(node.preds().into_iter().map(|x|*x), index_set);
             *out_degree = Rx::degree_in_subgraph(node.succs().into_iter(), index_set);
         }
-        println!("");
         let mut rst = Vec::new();
         let mut wait_for_release = Vec::new();
         // start node should not have any out edges in subgraph
@@ -310,7 +308,6 @@ impl Rx{
             for target in &map.get(&popped).unwrap().preds {
                 let idx = index_set.get_index_of(target).unwrap();
                 outs[idx] -= 1;
-                println!("{:?}",outs);
                 if outs[idx] == 0{
                     wait_for_release.push(*target);
                 }
@@ -341,9 +338,8 @@ impl LetStmtRx for Rx{
         cur
     }
     fn receive(received:String) {
-        println!("start to receive");
+        println!("{}",received);
         Self::singleton().interpret(received);
-        println!("receive end");
     }
 
     fn add_symnode(mut symnode:SymbolNode){
@@ -371,7 +367,6 @@ impl LetStmtRx for Rx{
         let mut old_node = singleton.map.get_mut(&old).unwrap();
         // chain old version and new version
         old_node.next = Some(updated_symnode.egglog.cur_sym());
-        println!("set {} some",old_node.cur_sym());
         updated_symnode.preds = old_node.preds.clone();
         drop(old_node);
         let mut new_syms = vec![];
@@ -382,7 +377,6 @@ impl LetStmtRx for Rx{
 
             // chain old version and new version
             singleton.map.get_mut(&old_sym).unwrap().next = Some(new_sym);
-            println!("set {} some",old_sym);
 
             new_syms.push(new_sym);
             singleton.map.insert(new_sym, sym_node);
@@ -410,10 +404,8 @@ impl LetStmtRx for Rx{
             IndexSet::from_iter(Some(new_sym).into_iter()),
             &IndexSet::from_iter(new_syms.into_iter()));
         for new_sym in topo{
-            println!("topo string plus");
             s += singleton.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
         }
-        println!("start receive");
         Rx::receive(s);
     }
     
@@ -436,7 +428,9 @@ impl LetStmtRx for Rx{
         })
     }
     
-    fn update_symnodes(start_iter:impl Iterator<Item=(Sym,SymbolNode)>) {}
+    fn update_symnodes(_start_iter:impl Iterator<Item=(Sym,SymbolNode)>) {
+        todo!()
+    }
         
     //     let mut index_set = IndexSet::default();
     //     let mut starts_and_update = IndexMap::default();
