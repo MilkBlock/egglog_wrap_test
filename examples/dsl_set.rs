@@ -1,3 +1,5 @@
+use std::{thread::{self, JoinHandle}, time::Duration};
+
 use egglog_macros::egglog_ty;
 // use egglog_wrapper::wrap::Sort;
 
@@ -12,7 +14,6 @@ struct VecCon{
     v : Vec<Cons>
 }
 
-
 #[egglog_ty]
 enum Root{
     V {v : VecCon}
@@ -21,14 +22,14 @@ enum Root{
 fn main(){
     let node1 = Cons::new_value(3, &Cons::<Rx>::new_end());
     let mut node2 = Cons::new_value(2, &node1);
-    let mut node3 = Cons::new_value(1, &node2);
-    let root = Root::new_v(&VecCon::new(vec![&node2]));
-    println!("node2 {}",node2.as_str());
+    let node3 = Cons::new_value(1, &node2);
+    let _root = Root::new_v(&VecCon::new(vec![&node2]));
+    println!("node2's current version is {}",node2.as_str());
     node2.set_v(4);
-    println!("node2 {}",node2.as_str());
-    let root = Root::new_v(&VecCon::new(vec![&node3]));
+    println!("node2's current version is {}",node2.as_str());
+    let _root = Root::new_v(&VecCon::new(vec![&node3]));
     node2.set_v(6);
-    println!("node2 {}",node2.as_str());
+    println!("node2's current version is {}",node2.as_str());
     Rx::singleton().interpret("(function F () Root :no-merge)".to_owned());
     Rx::singleton().interpret("(set (F) root2)".to_owned());
     Rx::singleton().to_dot("egraph.dot".into());

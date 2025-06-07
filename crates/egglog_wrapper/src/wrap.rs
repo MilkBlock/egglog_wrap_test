@@ -27,9 +27,12 @@ pub trait UpdateCounter<T:EgglogTy>{
 }
 pub struct Sort(pub &'static str);
 
+/// trait of basic functions to interact with egglog
 pub trait ToEgglog{
-    fn to_egglog(&mut self) -> String;
+    fn to_egglog(&self) -> String;
+    fn locate_latest(&mut self);
 }
+/// trait of node behavior
 pub trait EgglogNode:ToEgglog {
     fn succs_mut(&mut self)-> Vec<&mut Sym>;
     fn succs(&self)-> Vec<Sym>;
@@ -236,7 +239,6 @@ pub struct Rx{
 }
 impl Rx{
     pub fn interpret(&self,s:String){
-        println!("{}",s);
         let mut guard = self.inner.lock().unwrap();
         guard.egraph.parse_and_run_program(None, s.as_str()).unwrap();
     }
@@ -268,7 +270,7 @@ impl Rx{
     pub fn collect_symnode(cur_sym:Sym, index_set:&mut IndexSet<Sym>){
         let singleton = Self::singleton();
         let sym_node = singleton.map.get(&cur_sym).unwrap();
-        let v = sym_node.preds().cloned().collect::<Vec<_>>();
+        let v = sym_node.preds.clone();
         drop(sym_node);
         for pred in v{
             if index_set.contains(&pred) || singleton.map.get(&pred).unwrap().next.is_some(){
@@ -291,10 +293,11 @@ impl Rx{
         for (i,(in_degree,out_degree)) in ins.iter_mut().zip(outs.iter_mut()).enumerate(){
             let sym = index_set[i];
             print!("{} ",sym);
-            *in_degree = Rx::degree_in_subgraph(map.get(&sym).unwrap().preds().into_iter().map(|x|*x), index_set);
-            *out_degree = Rx::degree_in_subgraph(map.get(&sym).unwrap().succs().into_iter(), index_set);
+            let node = map.get(&sym).unwrap();
+            *in_degree = Rx::degree_in_subgraph(node.preds().into_iter().map(|x|*x), index_set);
+            *out_degree = Rx::degree_in_subgraph(node.succs().into_iter(), index_set);
         }
-            println!("");
+        println!("");
         let mut rst = Vec::new();
         let mut wait_for_release = Vec::new();
         // start node should not have any out edges in subgraph
@@ -312,7 +315,7 @@ impl Rx{
                     wait_for_release.push(*target);
                 }
             }
-            rst.push(popped);;
+            rst.push(popped);
         }
         rst
     }
@@ -338,12 +341,13 @@ impl LetStmtRx for Rx{
         cur
     }
     fn receive(received:String) {
+        println!("start to receive");
         Self::singleton().interpret(received);
+        println!("receive end");
     }
 
     fn add_symnode(mut symnode:SymbolNode){
         let singleton = Self::singleton();
-        let mut guard = singleton.inner.lock().unwrap();
         let sym = symnode.cur_sym();
         for node in symnode.succs_mut(){
             let node = &Rx::locate_latest( node);
@@ -359,7 +363,6 @@ impl LetStmtRx for Rx{
     fn update_symnode(mut old:Sym, mut updated_symnode:SymbolNode){
         let mut index_set = IndexSet::default();
         let singleton = Self::singleton();
-        let mut guard = singleton.inner.lock().unwrap();
 
         let old = Rx::locate_latest(&mut old);
 
@@ -370,6 +373,7 @@ impl LetStmtRx for Rx{
         old_node.next = Some(updated_symnode.egglog.cur_sym());
         println!("set {} some",old_node.cur_sym());
         updated_symnode.preds = old_node.preds.clone();
+        drop(old_node);
         let mut new_syms = vec![];
         // update all succs
         for &old_sym in index_set.iter(){
@@ -406,9 +410,10 @@ impl LetStmtRx for Rx{
             IndexSet::from_iter(Some(new_sym).into_iter()),
             &IndexSet::from_iter(new_syms.into_iter()));
         for new_sym in topo{
-            s += singleton.map.get_mut(&new_sym).unwrap().egglog.to_egglog().as_str();
+            println!("topo string plus");
+            s += singleton.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
         }
-        drop(guard);
+        println!("start receive");
         Rx::receive(s);
     }
     

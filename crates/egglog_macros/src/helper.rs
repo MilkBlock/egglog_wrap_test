@@ -442,7 +442,7 @@ pub fn variant_to_tys(variant:&Variant) -> Vec<Type> {
 }
 
 /// given variant a{ x:X, y:Y} 
-/// return vec! [ x, y ]
+/// return iterator [ x, y ].iter()
 pub fn variant_to_field_ident(
     variant:&Variant, 
 ) -> impl Iterator<Item = &proc_macro2::Ident> {

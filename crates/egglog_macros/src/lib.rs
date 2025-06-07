@@ -144,16 +144,23 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
             let to_egglog_impl = if is_basic_ty{
                 quote!{
                     impl<R:LetStmtRx, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>{
-                        fn to_egglog(&mut self) -> String{
-                            format!("(let {} (vec-of {}))",self.node.sym,self.node.ty.v.iter().fold("".to_owned(), |s,item| s+ item.as_str()+" " ))
+                        fn to_egglog(&self) -> String{
+                            format!("(let {} (vec-of {}))",self.node.sym,self.node.ty.v.iter_mut().fold("".to_owned(), |s,item| s+ item.as_str()+" " ))
+                        }
+                        fn locate_latest(&mut self){
+                            // do nothing
                         }
                     }
                 }
             }else {
                 quote!{
                     impl<R:LetStmtRx, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>{
-                        fn to_egglog(&mut self) -> String{
-                            format!("(let {} (vec-of {}))",self.node.sym,self.node.ty.v.iter_mut().fold("".to_owned(), |s,item| s+ R::locate_latest(item.detype_mut()).as_str()+" " ))
+                        fn to_egglog(&self) -> String{
+                            format!("(let {} (vec-of {}))",self.node.sym,self.node.ty.v.iter().fold("".to_owned(), |s,item| s+ item.as_str()+" " ))
+                        }
+                        fn locate_latest(&mut self){
+                            R::locate_latest(self.node.sym.detype_mut());
+                            self.node.ty.v.iter_mut().map(|item| R::locate_latest(item.detype_mut()));
                         }
                     }
                 }
@@ -270,32 +277,43 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                 quote! {#variant_name {#( #types_and_idents ),*  }}
             }).collect::<Vec<_>>();
 
-            let match_arms = data_enum.variants.iter().map(|variant|{
+            let to_egglog_match_arms = data_enum.variants.iter().map(|variant|{
+                let variant_idents = variant_to_field_ident(
+                    variant).collect::<Vec<_>>();
+                let variant_name = &variant.ident;
+                let s = " {:.3}".repeat(variant_idents.len());
+                let format_str = format!("(let {{}} ({} {}))",variant_name,s);
+                quote! {#name_inner::#variant_name {#( #variant_idents ),*  } => {
+                    format!(#format_str ,self.node.sym, #(#variant_idents),*)
+                }}
+            });
+            let locate_latest_match_arms = data_enum.variants.iter().map(|variant|{
                 let variant_idents = variant_to_field_ident(
                     variant);
                 let mapped_variant_idents = variant_to_mapped_ident_list(
                     variant,
-                    |x|{quote! {#x}},
-                    |x|{quote!{R::locate_latest(#x.detype_mut())}});
+                    |_|{quote! {}},
+                    |x|{quote!{R::locate_latest(#x.detype_mut());}});
                 let variant_name = &variant.ident;
-                let s = " {:.3}".repeat(mapped_variant_idents.len());
-                let format_str = format!("(let {{}} ({} {}))",variant_name,s);
-                quote! {#name_inner::#variant_name {#( #variant_idents ),*  } => {
-                    format!(#format_str ,self.node.sym, #(#mapped_variant_idents),*)
-                }}
+                quote! {
+                    #name_inner::#variant_name {#(#variant_idents),* } => {
+                        R::locate_latest(self.node.sym.detype_mut()); 
+                        #(#mapped_variant_idents)*
+                    }
+                }
             });
 
             let fns = data_enum.variants.iter().map(|variant|{
                 let ref_node_list = variant_to_ref_node_list(&variant,&name);
                 let field_idents = variants_to_assign_node_field_list(&variant);
                 let variant_name = &variant.ident;
-                let fn_name = format_ident!("new_{}",variant_name.to_string().to_snake_case());
+                let new_fn_name = format_ident!("new_{}",variant_name.to_string().to_snake_case());
                 
                 quote! { 
-                    pub fn #fn_name(#(#ref_node_list),*) -> #name_node<R,#variant_name>{
+                    pub fn #new_fn_name(#(#ref_node_list),*) -> #name_node<R,#variant_name>{
                         let ty = #name_inner::#variant_name {#(#field_idents),*  };
                         let node = Node { ty, sym: #name_counter.next_sym(), p:PhantomData, s:PhantomData::<#variant_name>};
-                        let mut node = #name_node {node};
+                        let node = #name_node {node};
                         R::add_symnode(node.to_symnode());
                         R::receive(node.to_egglog());
                         node
@@ -334,6 +352,7 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                                 let old = self.node.sym;
                                 self.node.sym = #name_counter.next_sym();
                                 R::update_symnode(old.detype(),self.to_symnode());
+                                self.locate_latest();
                             }
                         }
                     }
@@ -441,9 +460,14 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                         #(#fns)*
                     }
                     impl<R:LetStmtRx, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>{
-                        fn to_egglog(&mut self) -> String{
+                        fn to_egglog(&self) -> String{
+                            match &self.node.ty{
+                                #(#to_egglog_match_arms),*
+                            }
+                        }
+                        fn locate_latest(&mut self) {
                             match &mut self.node.ty{
-                                #(#match_arms),*
+                                #(#locate_latest_match_arms),*
                             }
                         }
                     }
