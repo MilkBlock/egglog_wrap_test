@@ -1,5 +1,5 @@
 use egglog_macros::egglog_ty;
-// use egglog_wrapper::wrap::Sort;
+use egglog_wrapper::basic_rx_no_vt;
 
 #[egglog_ty]
 enum Cons{
@@ -18,11 +18,13 @@ enum Root{
 }
 
 fn main(){
-    let node1 = Cons::new_value(3, &Cons::<Rx>::new_end());
+    let node1 = Cons::new_value(3, &Cons::<MyRx>::new_end());
     let node2 = Cons::new_value(2, &node1);
     let node3 = Cons::new_value(1, &node2);
     let root = Root::new_v(&VecCon::new(vec![&node1,&node2,&node3]));
     {node2};
     let m = root.as_str();
-    Rx::singleton().to_dot("egraph.dot".into());
+    MyRx::rx().to_dot("egraph.dot".into());
 }
+
+basic_rx_no_vt!(MyRx);

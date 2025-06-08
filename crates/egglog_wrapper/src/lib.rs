@@ -1,6 +1,9 @@
 use egglog_macros::egglog_ty;
 pub use derive_more;
 pub mod wrap;
+pub mod rx;
+pub mod rx_vt;
+pub mod macros;
 pub use smallvec;
 
 // Type aliases for Vec types
@@ -9,7 +12,6 @@ struct VecCtl {v:Vec<Ctl>}
 
 #[egglog_ty]
 struct VecWF {v:Vec<WeightedFn>}
-
 
 #[egglog_ty]
 struct VecHitBox {v:Vec<HitBox>}
@@ -184,8 +186,6 @@ enum RateCfg{
         wfs : VecWF
     }
 }
-
-
 
 #[egglog_ty]
 enum Path{

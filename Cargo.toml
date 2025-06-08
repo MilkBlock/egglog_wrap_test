@@ -11,7 +11,6 @@ egglog = "0.4.0"
 symbol_table = "0.4.0"
 derive_more = { version = "2.0.1", features = ["full"] }
 heck = "0.5.0"
-bevy_ecs = "0.16.1"
 dashmap = "6.1.0"
 
 [dependencies]
@@ -21,4 +20,3 @@ egglog.workspace = true
 tokio = { version = "1.45.1", features = ["default", "full", "rt-multi-thread"] }
 inventory.workspace = true
 derive_more.workspace = true
-bevy_ecs.workspace = true
