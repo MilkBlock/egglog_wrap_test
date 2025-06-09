@@ -12,8 +12,8 @@ pub trait Rx {
     fn update_symnodes(&self, iter:impl Iterator<Item=(Sym,SymbolNode)>);
 }
 
-pub trait RxSingletonGetter {
-    type RetTy: Rx;
+pub trait SingletonGetter {
+    type RetTy;
     fn rx() -> &'static Self::RetTy;
 }
 
@@ -25,7 +25,7 @@ pub trait RxSgl : 'static{
     fn update_symnodes(iter:impl Iterator<Item=(Sym,SymbolNode)>);
 }
 
-impl<R: Rx + 'static,T:RxSingletonGetter<RetTy = R> + 'static> RxSgl for T{
+impl<R: Rx + 'static,T:SingletonGetter<RetTy = R> + 'static> RxSgl for T{
     fn receive(received:String){
         Self::rx().receive(received);
     }
@@ -54,7 +54,7 @@ pub trait VersionCtlSgl{
     fn locate_next(node:&mut Sym) -> Sym;
 }
 
-impl<Ret:Rx + VersionCtl + 'static ,S: RxSingletonGetter<RetTy = Ret>> VersionCtlSgl for  S { 
+impl<Ret:Rx + VersionCtl + 'static ,S: SingletonGetter<RetTy = Ret>> VersionCtlSgl for  S { 
     fn locate_latest(node:&mut Sym) -> Sym{
         Self::rx().locate_latest(node)
     }
@@ -300,7 +300,7 @@ pub trait RxCommitSgl {
     fn commit<T:EgglogNode + Clone>(node:&T) ;
 }
 
-impl<Ret:Rx + VersionCtl+ RxCommit + 'static ,S: RxSingletonGetter<RetTy = Ret>> RxCommitSgl for  S {
+impl<Ret:Rx + VersionCtl+ RxCommit + 'static ,S: SingletonGetter<RetTy = Ret>> RxCommitSgl for  S {
     fn commit<T:EgglogNode + Clone>(node:&T)  {
         S::rx().commit(node);
     }

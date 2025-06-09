@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use egglog_wrapper::{basic_rx_no_vt, wrap::RxSingletonGetter, AnimAtom, BRabject, BRabjectInstance, BezierPathBuilder, BuiltinF, Color, Ctl, Duration, Fn, Offset, Path, Point, Points, RateCfg, Shape, VecCtl, VecWF, Weight, WeightedFn};
+use egglog_wrapper::{basic_rx_no_vt, wrap::SingletonGetter, AnimAtom, BRabject, BRabjectInstance, BezierPathBuilder, BuiltinF, Color, Ctl, Duration, Fn, Offset, Path, Point, Points, RateCfg, Shape, VecCtl, VecWF, Weight, WeightedFn};
 
 fn main() {
     // three points

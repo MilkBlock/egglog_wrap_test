@@ -4,7 +4,7 @@ macro_rules! basic_rx_no_vt {
         struct $name{
             rx:egglog_wrapper::rx::RxNoVT
         }
-        impl RxSingletonGetter for $name {
+        impl SingletonGetter for $name {
             type RetTy = egglog_wrapper::rx::RxNoVT;
             fn rx() -> &'static egglog_wrapper::rx::RxNoVT{
                 static INSTANCE: std::sync::OnceLock<$name> = std::sync::OnceLock::new();
@@ -24,7 +24,7 @@ macro_rules! basic_rx_vt {
         struct $name{
             rx:egglog_wrapper::rx_vt::RxVT
         }
-        impl RxSingletonGetter for $name {
+        impl SingletonGetter for $name {
             type RetTy = egglog_wrapper::rx_vt::RxVT;
             fn rx() -> &'static egglog_wrapper::rx_vt::RxVT{
                 static INSTANCE: std::sync::OnceLock<$name> = std::sync::OnceLock::new();
