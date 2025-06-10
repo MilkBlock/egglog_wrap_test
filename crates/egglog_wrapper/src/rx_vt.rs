@@ -6,7 +6,8 @@ use crate::{collect_type_defs, wrap::{EgglogNode, Rx, RxCommit, Sym, SymbolNode,
 pub struct RxVT{
     egraph : Mutex<EGraph>,
     map : DashMap<Sym,SymbolNode>,
-    recorder : Mutex<Vec<CommitCheckPoint>>,
+    checkpoints : Mutex<Vec<CommitCheckPoint>>,
+    node_updated : DashMap<Sym,Box<dyn EgglogNode>>
 }
 
 pub struct CommitCheckPoint{
@@ -115,11 +116,81 @@ impl RxVT{
                 },
             ),
             map: DashMap::default(),
-            recorder: Mutex::new(Vec::new()),
+            checkpoints: Mutex::new(Vec::new()),
+            node_updated: DashMap::default(),
         }
     }
     pub fn new() -> Self{
         Self::new_with_type_defs(collect_type_defs())
+    }
+    fn add_symnode(&self,mut symnode:SymbolNode){
+        let sym = symnode.cur_sym();
+        for node in symnode.succs_mut(){
+            let node = &self.locate_latest( node);
+            self.map.get_mut(node)
+                .unwrap_or_else(||panic!("node {} not found", node.as_str()))
+                .preds.push(sym);
+        }
+        self.map.insert(symnode.cur_sym(), symnode);
+    }
+
+    fn update_symnode(&self, old:&mut Sym, mut updated_symnode:SymbolNode){
+        let mut index_set = IndexSet::default();
+
+        let mut copied_old = *old;
+        let old = self.locate_latest(&mut copied_old);
+
+        // collect all syms that will change
+        self.collect_ancestors(old, &mut index_set);
+        let mut old_node = self.map.get_mut(&old).unwrap();
+        // chain old version and new version
+        old_node.next = Some(updated_symnode.egglog.cur_sym());
+        updated_symnode.preds = old_node.preds.clone();
+        drop(old_node);
+        let mut new_syms = vec![];
+        // update all succs
+        for &old_sym in index_set.iter(){
+            let mut sym_node = self.map.get(&old_sym).unwrap().clone();
+            let new_sym = sym_node.next_sym();
+
+            // chain old version and new version
+            self.map.get_mut(&old_sym).unwrap().next = Some(new_sym);
+
+            new_syms.push(new_sym);
+            self.map.insert(new_sym, sym_node);
+        }
+        index_set.insert(old);
+        new_syms.push(updated_symnode.cur_sym());
+        self.map.insert(updated_symnode.cur_sym() ,updated_symnode);
+        // update all preds
+        for &new_sym in &new_syms{
+            let mut sym_node = self.map.get_mut(&new_sym).unwrap();
+            for sym in sym_node.preds_mut(){
+                if let Some(idx) =  index_set.get_index_of(&*sym){
+                    *sym = new_syms[idx];
+                }
+            }
+            for sym in sym_node.succs_mut(){
+                if let Some(idx) =  index_set.get_index_of(&*sym){
+                    *sym = new_syms[idx];
+                }
+            }
+        }
+        let mut s = "".to_owned();
+        let topo = self.topo_sort(
+            &IndexSet::from_iter(new_syms.into_iter()),
+            TopoDirection::Up,
+        );
+        for new_sym in topo{
+            s += self.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
+        }
+        self.receive(s);
+    }
+    
+    /// update all ancestors recursively in guest and send updated term by egglog string repr to host
+    /// when you update the node
+    /// This is version control mode impl so we will not change &mut old sym.
+    fn update_symnodes(&self, _start_iter:impl Iterator<Item=(Sym,SymbolNode)>) {
     }
 }
 
@@ -159,94 +230,14 @@ impl Rx for RxVT{
         println!("{}",received);
         self.interpret(received);
     }
-
-    fn add_symnode(&self,mut symnode:SymbolNode){
-        let sym = symnode.cur_sym();
-        for node in symnode.succs_mut(){
-            let node = &self.locate_latest( node);
-            self.map.get_mut(node)
-                .unwrap_or_else(||panic!("node {} not found", node.as_str()))
-                .preds.push(sym);
-        }
-        self.map.insert(symnode.cur_sym(), symnode);
-    }
-
-    /// update all predecessor recursively in guest and send updated term by egglog repr to host
-    /// when you update the node
-    /// for version control mode we will not change &mut old sym.
-    fn update_symnode(&self, old:&mut Sym, mut updated_symnode:SymbolNode){
-        let mut index_set = IndexSet::default();
-        let mut copied_old = *old;
-        let old = self.locate_latest(&mut copied_old);
-
-        // collect all syms that will change
-        self.collect_ancestors(old, &mut index_set);
-        let mut old_node = self.map.get_mut(&old).unwrap();
-        // chain old version and new version
-        old_node.next = Some(updated_symnode.egglog.cur_sym());
-        updated_symnode.preds = old_node.preds.clone();
-        drop(old_node);
-        let mut new_syms = vec![];
-        // update all succs
-        for &old_sym in index_set.iter(){
-            let mut sym_node = self.map.get(&old_sym).unwrap().clone();
-            let new_sym = sym_node.next_sym();
-
-            // chain old version and new version
-            self.map.get_mut(&old_sym).unwrap().next = Some(new_sym);
-
-            new_syms.push(new_sym);
-            self.map.insert(new_sym, sym_node);
-        }
-        index_set.insert(old);
-        let new_sym = updated_symnode.cur_sym();
-        new_syms.push(updated_symnode.cur_sym());
-        self.map.insert(updated_symnode.cur_sym() ,updated_symnode);
-        // update all preds
-        for &new_sym in &new_syms{
-            let mut sym_node = self.map.get_mut(&new_sym).unwrap();
-            for sym in sym_node.preds_mut(){
-                if let Some(idx) =  index_set.get_index_of(&*sym){
-                    *sym = new_syms[idx];
-                }
-            }
-            for sym in sym_node.succs_mut(){
-                if let Some(idx) =  index_set.get_index_of(&*sym){
-                    *sym = new_syms[idx];
-                }
-            }
-        }
-        let mut s = "".to_owned();
-        let topo = self.topo_sort(
-            &IndexSet::from_iter(new_syms.into_iter()),
-            TopoDirection::Up,
-        );
-        for new_sym in topo{
-            s += self.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
-        }
-        self.receive(s);
+    
+    fn on_new(&self, symnode:SymbolNode) {
+        self.add_symnode(symnode);
     }
     
-    fn update_symnodes(&self, _start_iter:impl Iterator<Item=(Sym,SymbolNode)>) {
-        todo!()
+    fn on_set(&self, old:&mut Sym,symnode:SymbolNode) {
+        self.update_symnode(old, symnode);
     }
-    // fn rx() -> &'static Self {
-    //     static INSTANCE: OnceLock<Rx> = OnceLock::new();
-    //     INSTANCE.get_or_init(||{
-    //         Self {
-    //             egraph: Mutex::new(
-    //                 {
-    //                     let mut e = EGraph::default();
-    //                     let type_defs = collect_type_defs();
-    //                     println!("{}",type_defs);
-    //                     e.parse_and_run_program(None, type_defs.as_ref()).unwrap();
-    //                     e
-    //                 },
-    //             ),
-    //             map: DashMap::default(),
-    //         }
-    //     })
-    // }
 }
 
 impl RxCommit for RxVT{
@@ -254,8 +245,8 @@ impl RxCommit for RxVT{
     /// 1. commit all subnodes (if you also call set fn on subnodes they will also be committed)
     /// 2. commit basing the latest version of the working graph (working graph record all versions)
     /// 3. if RxCommit is implemented you can only change egraph by commit things. It's lazy.
-    fn commit<T:EgglogNode + Clone>(&self, node:&T) {
-        self.recorder.lock().unwrap().push(CommitCheckPoint{
+    fn on_commit<T:EgglogNode + Clone>(&self, node:&T) {
+        self.checkpoints.lock().unwrap().push(CommitCheckPoint{
             committed_node_root: node.cur_sym()
         });
         let mut starts = IndexSet::default();

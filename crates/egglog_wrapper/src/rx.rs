@@ -100,19 +100,6 @@ impl RxNoVT{
         }
         cur
     }
-    
-}
-
-
-unsafe impl Send for RxNoVT{ }
-unsafe impl Sync for RxNoVT{ }
-// MARK: Receiver
-impl Rx for RxNoVT{
-    fn receive(&self, received:String) {
-        println!("{}",received);
-        self.interpret(received);
-    }
-
     fn add_symnode(&self, mut symnode:SymbolNode){
         self.receive(symnode.egglog.to_egglog());
         let sym = symnode.cur_sym();
@@ -181,22 +168,24 @@ impl Rx for RxNoVT{
     fn update_symnodes(&self, _start_iter:impl Iterator<Item=(Sym,SymbolNode)>) {
         todo!()
     }
+    
+}
 
-    // fn rx() -> &'static impl LetStmtRxInner {
-    //     static INSTANCE: OnceLock<RxInner> = OnceLock::new();
-    //     INSTANCE.get_or_init(||{
-    //         Self {
-    //             egraph: Mutex::new(
-    //                 {
-    //                     let mut e = EGraph::default();
-    //                     let type_defs = collect_type_defs();
-    //                     println!("{}",type_defs);
-    //                     e.parse_and_run_program(None, type_defs.as_ref()).unwrap();
-    //                     e
-    //                 },
-    //             ),
-    //             map: DashMap::default(),
-    //         }
-    //     })
-    // }
+
+unsafe impl Send for RxNoVT{ }
+unsafe impl Sync for RxNoVT{ }
+// MARK: Receiver
+impl Rx for RxNoVT{
+    fn receive(&self, received:String) {
+        println!("{}",received);
+        self.interpret(received);
+    }
+
+    fn on_new(&self, symnode:SymbolNode) {
+        self.add_symnode(symnode);
+    }
+    
+    fn on_set(&self, old:&mut Sym,symnode:SymbolNode) {
+        self.update_symnode(old, symnode);
+    }
 }

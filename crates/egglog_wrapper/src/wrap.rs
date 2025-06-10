@@ -7,9 +7,8 @@ use crate::AnimAtom;
 
 pub trait Rx {
     fn receive(&self, received:String);
-    fn add_symnode(&self, symnode:SymbolNode);
-    fn update_symnode(&self, old:&mut Sym,symnode:SymbolNode);
-    fn update_symnodes(&self, iter:impl Iterator<Item=(Sym,SymbolNode)>);
+    fn on_new(&self, symnode:SymbolNode);
+    fn on_set(&self, old:&mut Sym,symnode:SymbolNode);
 }
 
 pub trait SingletonGetter {
@@ -20,23 +19,19 @@ pub trait SingletonGetter {
 pub trait RxSgl : 'static{
     // delegate all functions from LetStmtRxInner
     fn receive(received:String);
-    fn add_symnode(symnode:SymbolNode);
-    fn update_symnode(old:&mut Sym,symnode:SymbolNode);
-    fn update_symnodes(iter:impl Iterator<Item=(Sym,SymbolNode)>);
+    fn on_new(symnode:SymbolNode);
+    fn on_set(old:&mut Sym,symnode:SymbolNode);
 }
 
 impl<R: Rx + 'static,T:SingletonGetter<RetTy = R> + 'static> RxSgl for T{
     fn receive(received:String){
         Self::rx().receive(received);
     }
-    fn add_symnode(symnode:SymbolNode){
-        Self::rx().add_symnode(symnode);
+    fn on_new(symnode:SymbolNode){
+        Self::rx().on_new(symnode);
     }
-    fn update_symnode(old:&mut Sym,symnode:SymbolNode){
-        Self::rx().update_symnode(old,symnode);
-    }
-    fn update_symnodes(iter:impl Iterator<Item=(Sym,SymbolNode)>){
-        Self::rx().update_symnodes(iter);
+    fn on_set(old:&mut Sym,symnode:SymbolNode){
+        Self::rx().on_set(old,symnode);
     }
 }
 
@@ -293,16 +288,16 @@ impl Syms{
 /// Rx::commit(&self, node);
 /// ```
 pub trait RxCommit {
-    fn commit<T:EgglogNode + Clone>(&self, node:&T) ;
+    fn on_commit<T:EgglogNode + Clone>(&self, node:&T) ;
 }
 
 pub trait RxCommitSgl {
-    fn commit<T:EgglogNode + Clone>(node:&T) ;
+    fn on_commit<T:EgglogNode + Clone>(node:&T) ;
 }
 
 impl<Ret:Rx + VersionCtl+ RxCommit + 'static ,S: SingletonGetter<RetTy = Ret>> RxCommitSgl for  S {
-    fn commit<T:EgglogNode + Clone>(node:&T)  {
-        S::rx().commit(node);
+    fn on_commit<T:EgglogNode + Clone>(node:&T)  {
+        S::rx().on_commit(node);
     }
 }
 
@@ -317,4 +312,16 @@ impl<Ret:Rx + VersionCtl+ RxCommit + 'static ,S: SingletonGetter<RetTy = Ret>> R
 /// ```
 pub trait Commit {
     fn commit(&self);
+}
+
+
+/// In Egglog there are 2 ways to interact with egraph 
+/// 1. String of egglog code
+/// 2. Vector of Egglog Command Struct
+/// Use this Interpreter trait to concile them
+/// 
+/// Also there are 
+pub trait Interpreter {
+    type Interpreted;
+    fn interpret(interpreted: Self::Interpreted);
 }

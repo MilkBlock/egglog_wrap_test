@@ -212,7 +212,7 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                                 let #field_name = #field_name.into_iter().map(|r| r.as_ref().sym).collect();
                                 let node = Node{ ty: #name_inner{v:#field_name}, sym: #name_counter.next_sym(),p: PhantomData, s: PhantomData};
                                 let mut node = #name_node {node};
-                                R::add_symnode(node.to_symnode());
+                                R::on_new(node.to_symnode());
                                 node
                             }
                             pub fn to_symnode(&self) -> SymbolNode{
@@ -337,7 +337,7 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                         let ty = #name_inner::#variant_name {#(#field_idents),*  };
                         let node = Node { ty, sym: #name_counter.next_sym(), p:PhantomData, s:PhantomData::<#variant_name>};
                         let node = #name_node {node};
-                        R::add_symnode(node.to_symnode());
+                        R::on_new(node.to_symnode());
                         node
                     }
                 } 
@@ -376,7 +376,7 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                                 };
                                 let mut symnode = self.to_symnode();
                                 symnode.egglog.next_sym();
-                                R::update_symnode(self.node.sym.detype_mut(),symnode);
+                                R::on_set(self.node.sym.detype_mut(),symnode);
                                 self
                             }
                         }
@@ -523,7 +523,7 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                         #name_node<R, S>: EgglogNode
                     {
                         fn commit(&self) {
-                            R::commit(self);
+                            R::on_commit(self);
                         }
                     }
 
