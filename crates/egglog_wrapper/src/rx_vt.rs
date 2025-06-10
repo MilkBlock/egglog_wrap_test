@@ -10,7 +10,6 @@ pub struct RxVT {
     egraph: Mutex<EGraph>,
     map: DashMap<Sym, SymbolNode>,
     checkpoints: Mutex<Vec<CommitCheckPoint>>,
-    node_updated: DashMap<Sym, Box<dyn EgglogNode>>,
 }
 
 pub struct CommitCheckPoint {
@@ -76,14 +75,14 @@ impl RxVT {
             *in_degree = RxVT::degree_in_subgraph(node.preds().into_iter().map(|x| *x), index_set);
             *out_degree = RxVT::degree_in_subgraph(node.succs().into_iter(), index_set);
         }
-        let (mut ins, mut outs) = match direction {
+        let (mut _ins, mut outs) = match direction {
             TopoDirection::Up => (ins, outs),
             TopoDirection::Down => (outs, ins),
         };
         let mut rst = Vec::new();
         let mut wait_for_release = Vec::new();
         // start node should not have any out edges in subgraph
-        for (idx, value) in outs.iter().enumerate() {
+        for (idx, _value) in outs.iter().enumerate() {
             if 0 == outs[idx] {
                 wait_for_release.push(index_set[idx]);
             }
@@ -121,7 +120,6 @@ impl RxVT {
             }),
             map: DashMap::default(),
             checkpoints: Mutex::new(Vec::new()),
-            node_updated: DashMap::default(),
         }
     }
     pub fn new() -> Self {
@@ -130,29 +128,28 @@ impl RxVT {
     fn add_symnode(&self, mut symnode: SymbolNode) {
         let sym = symnode.cur_sym();
         for node in symnode.succs_mut() {
-            let node = &self.locate_latest(node);
+            let latest = &self.locate_latest(*node);
             self.map
-                .get_mut(node)
-                .unwrap_or_else(|| panic!("node {} not found", node.as_str()))
+                .get_mut(latest)
+                .unwrap_or_else(|| panic!("node {} not found", latest.as_str()))
                 .preds
                 .push(sym);
         }
         self.map.insert(symnode.cur_sym(), symnode);
     }
 
-    fn update_symnode(&self, old: &mut Sym, mut updated_symnode: SymbolNode) {
+    fn update_symnode(&self, old: Sym, mut updated_symnode: SymbolNode) -> Sym {
         let mut index_set = IndexSet::default();
 
-        let mut copied_old = *old;
-        let old = self.locate_latest(&mut copied_old);
+        let lastest = self.locate_latest(old);
 
         // collect all syms that will change
-        self.collect_ancestors(old, &mut index_set);
-        let mut old_node = self.map.get_mut(&old).unwrap();
+        self.collect_ancestors(lastest, &mut index_set);
+        let mut latest_node = self.map.get_mut(&lastest).unwrap();
         // chain old version and new version
-        old_node.next = Some(updated_symnode.egglog.cur_sym());
-        updated_symnode.preds = old_node.preds.clone();
-        drop(old_node);
+        latest_node.next = Some(updated_symnode.egglog.cur_sym());
+        updated_symnode.preds = latest_node.preds.clone();
+        drop(latest_node);
         let mut new_syms = vec![];
         // update all succs
         for &old_sym in index_set.iter() {
@@ -165,8 +162,9 @@ impl RxVT {
             new_syms.push(new_sym);
             self.map.insert(new_sym, sym_node);
         }
-        index_set.insert(old);
-        new_syms.push(updated_symnode.cur_sym());
+        index_set.insert(lastest);
+        let next_latest_sym = updated_symnode.cur_sym();
+        new_syms.push(next_latest_sym);
         self.map.insert(updated_symnode.cur_sym(), updated_symnode);
         // update all preds
         for &new_sym in &new_syms {
@@ -191,6 +189,7 @@ impl RxVT {
             s += self.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
         }
         self.receive(s);
+        next_latest_sym
     }
 
     /// update all ancestors recursively in guest and send updated term by egglog string repr to host
@@ -203,27 +202,33 @@ unsafe impl Send for RxVT {}
 unsafe impl Sync for RxVT {}
 impl VersionCtl for RxVT {
     /// locate the lastest version of the symbol
-    fn locate_latest(&self, old: &mut Sym) -> Sym {
+    fn locate_latest(&self, old: Sym) -> Sym {
         let map = &self.map;
-        let mut cur = *old;
+        let mut cur = old;
         while let Some(newer) = map.get(&cur).unwrap().next {
             cur = newer;
         }
-        *old = cur;
         cur
     }
 
     // locate next version
-    fn locate_next(&self, old: &mut Sym) -> Sym {
+    fn locate_next(&self, old: Sym) -> Sym {
         let map = &self.map;
-        let mut cur = *old;
+        let mut cur = old;
         if let Some(newer) = map.get(&cur).unwrap().next {
             cur = newer;
         } else {
             // do nothing because current version is the latest
         }
-        *old = cur;
         cur
+    }
+
+    fn set_latest(&self, node: &mut Sym) {
+        *node = self.locate_latest(*node);
+    }
+
+    fn set_next(&self, node: &mut Sym) {
+        *node = self.locate_next(*node);
     }
 }
 
@@ -239,7 +244,7 @@ impl Rx for RxVT {
     }
 
     fn on_set(&self, old: &mut Sym, symnode: SymbolNode) {
-        self.update_symnode(old, symnode);
+        // do nothing, this operation has been delayed to commit
     }
 }
 
@@ -248,10 +253,11 @@ impl RxCommit for RxVT {
     /// 1. commit all subnodes (if you also call set fn on subnodes they will also be committed)
     /// 2. commit basing the latest version of the working graph (working graph record all versions)
     /// 3. if RxCommit is implemented you can only change egraph by commit things. It's lazy.
-    fn on_commit<T: EgglogNode + Clone>(&self, node: &T) {
+    fn on_commit<T: EgglogNode + Into<SymbolNode> + Clone + 'static>(&self, node: &T) {
         self.checkpoints.lock().unwrap().push(CommitCheckPoint {
             committed_node_root: node.cur_sym(),
         });
+        self.update_symnode(node.cur_sym(), node.clone().into());
         let mut starts = IndexSet::default();
         starts.insert(node.cur_sym());
         let mut nodes_to_topo = IndexSet::default();

@@ -1,11 +1,15 @@
 use derive_more::{Debug, Deref, DerefMut, IntoIterator};
 use smallvec::SmallVec;
-use std::{borrow::Borrow, fmt, hash::Hash, marker::PhantomData, sync::atomic::AtomicU32};
+use std::{
+    borrow::Borrow,
+    fmt,
+    hash::Hash,
+    marker::PhantomData,
+    sync::atomic::AtomicU32,
+};
 use symbol_table::GlobalSymbol;
 
-use crate::AnimAtom;
-
-pub trait Rx {
+pub trait Rx: 'static {
     fn receive(&self, received: String);
     fn on_new(&self, symnode: SymbolNode);
     fn on_set(&self, old: &mut Sym, symnode: SymbolNode);
@@ -38,23 +42,33 @@ impl<R: Rx + 'static, T: SingletonGetter<RetTy = R> + 'static> RxSgl for T {
 /// version control triat
 /// which should be implemented by Rx
 pub trait VersionCtl {
-    fn locate_latest(&self, node: &mut Sym) -> Sym;
-    fn locate_next(&self, node: &mut Sym) -> Sym;
+    fn locate_latest(&self, node: Sym) -> Sym;
+    fn locate_next(&self, node: Sym) -> Sym;
+    fn set_latest(&self, node: &mut Sym);
+    fn set_next(&self, node: &mut Sym);
 }
 
 /// version control triat
 /// which should be implemented by Rx
 pub trait VersionCtlSgl {
-    fn locate_latest(node: &mut Sym) -> Sym;
-    fn locate_next(node: &mut Sym) -> Sym;
+    fn locate_latest(node: Sym) -> Sym;
+    fn locate_next(node: Sym) -> Sym;
+    fn set_latest(node: &mut Sym);
+    fn set_next(node: &mut Sym);
 }
 
 impl<Ret: Rx + VersionCtl + 'static, S: SingletonGetter<RetTy = Ret>> VersionCtlSgl for S {
-    fn locate_latest(node: &mut Sym) -> Sym {
+    fn locate_latest(node: Sym) -> Sym {
         Self::rx().locate_latest(node)
     }
-    fn locate_next(node: &mut Sym) -> Sym {
+    fn locate_next(node: Sym) -> Sym {
         Self::rx().locate_next(node)
+    }
+    fn set_latest(node: &mut Sym) {
+        Self::rx().set_latest(node)
+    }
+    fn set_next(node: &mut Sym) {
+        Self::rx().set_next(node)
     }
 }
 
@@ -68,6 +82,21 @@ pub trait UpdateCounter<T: EgglogTy> {
 }
 pub struct Sort(pub &'static str);
 
+impl<T> Sym<T> {
+    pub fn erase(&self) -> Sym<()> {
+        // safety note: type erasure
+        unsafe { *&*(self as *const Sym<T> as *const Sym) }
+    }
+    pub fn erase_ref(&self) -> &Sym<()> {
+        // safety note: type erasure
+        unsafe { &*(self as *const Sym<T> as *const Sym) }
+    }
+    pub fn erase_mut(&mut self) -> &mut Sym<()> {
+        // safety note: type erasure
+        unsafe { &mut *(self as *mut Sym<T> as *mut Sym) }
+    }
+}
+
 /// trait of basic functions to interact with egglog
 pub trait ToEgglog {
     fn to_egglog(&self) -> String;
@@ -80,13 +109,14 @@ pub trait LocateVersion {
     fn locate_next(&mut self);
 }
 /// trait of node behavior
-pub trait EgglogNode: ToEgglog {
+pub trait EgglogNode: ToEgglog + 'static {
     fn succs_mut(&mut self) -> Vec<&mut Sym>;
     fn succs(&self) -> Vec<Sym>;
     /// set new sym and return the new sym
     fn next_sym(&mut self) -> Sym;
     // return current sym
     fn cur_sym(&self) -> Sym;
+    fn cur_sym_mut(&mut self) -> &mut Sym;
 
     fn clone_dyn(&self) -> Box<dyn EgglogNode>;
 }
@@ -94,11 +124,11 @@ pub trait EgglogNode: ToEgglog {
 // collect all sorts into inventory, so that we could send the definitions of types.
 inventory::collect!(Sort);
 
-pub trait EgglogEnumVariantTy: Clone {
+pub trait EgglogEnumVariantTy: Clone + 'static {
     const TY_NAME: &'static str;
 }
 /// instance of specified EgglogTy & its VariantTy
-#[derive(Debug, Clone, ::derive_more::Deref)]
+#[derive(Debug, Clone)]
 pub struct Node<T, R, I, S>
 where
     T: EgglogTy,
@@ -107,7 +137,6 @@ where
     S: EgglogEnumVariantTy,
 {
     pub ty: I,
-    #[deref]
     pub sym: Sym<T>,
     pub p: PhantomData<R>,
     pub s: PhantomData<S>,
@@ -135,16 +164,8 @@ pub struct Sym<T = ()> {
     pub inner: GlobalSymbol,
     pub p: PhantomData<T>,
 }
+
 impl<T> Sym<T> {
-    pub fn detype(&self) -> Sym {
-        Sym {
-            inner: self.inner,
-            p: PhantomData,
-        }
-    }
-    pub fn detype_mut(&mut self) -> &mut Sym {
-        unsafe { &mut *(self as *mut Sym<T> as *mut Sym<()>) }
-    }
     pub fn new(global_sym: GlobalSymbol) -> Self {
         Self {
             inner: global_sym,
@@ -178,7 +199,7 @@ impl<T> From<Sym<T>> for &str {
 }
 impl<T: EgglogTy> From<Syms<T>> for Syms {
     fn from(value: Syms<T>) -> Self {
-        value.into_iter().map(|s| s.detype()).collect()
+        value.into_iter().map(|s| s.erase()).collect()
     }
 }
 /// count the number of nodes of specific EgglogTy for specific binding Rx
@@ -193,6 +214,7 @@ impl<T: EgglogTy> TyCounter<T> {
             t: PhantomData,
         }
     }
+    // get next symbol of specified type T
     pub fn next_sym(&self) -> Sym<T> {
         Sym {
             inner: format!("{}{}", T::TY_NAME_LOWER, self.inc()).into(),
@@ -202,7 +224,7 @@ impl<T: EgglogTy> TyCounter<T> {
     pub fn get_counter(&self) -> u32 {
         self.counter.load(std::sync::atomic::Ordering::Acquire)
     }
-    /// 递增计数器
+    /// counter increment atomically
     pub fn inc(&self) -> u32 {
         self.counter
             .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
@@ -309,7 +331,7 @@ pub trait RxCommitSgl {
 
 impl<Ret, S> RxCommitSgl for S
 where
-    Ret: Rx + VersionCtl + RxCommit + 'static,
+    Ret: Rx + VersionCtl + RxCommit,
     S: SingletonGetter<RetTy = Ret>,
 {
     fn on_commit<T: EgglogNode + Clone>(node: &T) {
@@ -340,3 +362,12 @@ pub trait Interpreter {
     type Interpreted;
     fn interpret(interpreted: Self::Interpreted);
 }
+
+// pub trait EgglogNodeMarker{ }
+
+impl<T: EgglogNode + Clone + 'static> From<T> for SymbolNode {
+    fn from(value: T) -> Self {
+        SymbolNode::new(value.cur_sym(), Box::new(value.clone()))
+    }
+}
+

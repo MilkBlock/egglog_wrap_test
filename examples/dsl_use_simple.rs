@@ -25,7 +25,7 @@ fn main() {
     {
         node2
     };
-    let m = root.as_str();
+    let m = root.cur_sym();
     MyRx::rx().to_dot("egraph.dot".into());
 }
 

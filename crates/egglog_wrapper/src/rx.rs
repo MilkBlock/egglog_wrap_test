@@ -50,7 +50,7 @@ impl RxNoVT {
             if index_set.contains(&pred) || self.map.get(&pred).unwrap().next.is_some() {
                 // do nothing
             } else {
-                index_set.insert(pred.clone());
+                index_set.insert(pred);
                 self.collect_symnode(pred, index_set)
             }
         }

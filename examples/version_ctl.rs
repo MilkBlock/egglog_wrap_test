@@ -22,18 +22,18 @@ fn main() {
     let mut node2 = Cons::new_value(2, &node1);
     let node3 = Cons::new_value(1, &node2);
     let root = Root::new_v(&VecCon::new(vec![&node2]));
-    println!("node2's current version is {}", node2.as_str());
+    println!("node2's current version is {}", node2.cur_sym());
     let mut old_version = root.clone();
     node2.set_v(4);
-    println!("node2's current version is {}", node2.as_str());
+    println!("node2's current version is {}", node2.cur_sym());
     node2.set_v(6);
-    println!("node2's current version is {}", node2.as_str());
+    println!("node2's current version is {}", node2.cur_sym());
     MyRx::rx().interpret("(function Latest () Root :no-merge)".to_owned());
     MyRx::rx().interpret("(function OldVersion () Root :no-merge)".to_owned());
-    MyRx::rx().interpret(format!("(set (OldVersion) {})", old_version.as_str()).to_owned());
+    MyRx::rx().interpret(format!("(set (OldVersion) {})", old_version.cur_sym()).to_owned());
     old_version.locate_latest();
     let new_version = old_version;
-    MyRx::rx().interpret(format!("(set (Latest) {})", new_version.as_str()).to_owned());
+    MyRx::rx().interpret(format!("(set (Latest) {})", new_version.cur_sym()).to_owned());
     MyRx::rx().to_dot("egraph.dot".into());
 }
 
