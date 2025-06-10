@@ -2,27 +2,29 @@ use egglog_macros::egglog_ty;
 use egglog_wrapper::basic_rx_no_vt;
 
 #[egglog_ty]
-enum Cons{
-    Value {v : i64, con : Box<Cons>},
-    End {}
+enum Cons {
+    Value { v: i64, con: Box<Cons> },
+    End {},
 }
 
 #[egglog_ty]
-struct VecCon{
-    v : Vec<Cons>
+struct VecCon {
+    v: Vec<Cons>,
 }
 
 #[egglog_ty]
-enum Root{
-    V {v : VecCon}
+enum Root {
+    V { v: VecCon },
 }
 
-fn main(){
+fn main() {
     let node1 = Cons::new_value(3, &Cons::<MyRx>::new_end());
     let node2 = Cons::new_value(2, &node1);
     let node3 = Cons::new_value(1, &node2);
-    let root = Root::new_v(&VecCon::new(vec![&node1,&node2,&node3]));
-    {node2};
+    let root = Root::new_v(&VecCon::new(vec![&node1, &node2, &node3]));
+    {
+        node2
+    };
     let m = root.as_str();
     MyRx::rx().to_dot("egraph.dot".into());
 }

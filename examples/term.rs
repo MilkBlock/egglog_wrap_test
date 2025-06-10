@@ -1,6 +1,10 @@
-use egglog::{ast::{Parser, Symbol}, match_term_app, span, Term, TermDag};
+use egglog::{
+    Term, TermDag,
+    ast::{Parser, Symbol},
+    match_term_app, span,
+};
 
-fn main(){
+fn main() {
     let s = r#"(f (g x y) x y (g x y))"#;
     let (td, t) = parse_term(s);
     match_term_app!(t; {

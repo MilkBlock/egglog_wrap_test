@@ -1,31 +1,38 @@
-use egglog_macros::egglog_ty;
 pub use derive_more;
-pub mod wrap;
+use egglog_macros::egglog_ty;
+pub mod macros;
 pub mod rx;
 pub mod rx_vt;
-pub mod macros;
+pub mod wrap;
 pub use smallvec;
 
 // Type aliases for Vec types
 #[egglog_ty]
-struct VecCtl {v:Vec<Ctl>}
+struct VecCtl {
+    v: Vec<Ctl>,
+}
 
 #[egglog_ty]
-struct VecWF {v:Vec<WeightedFn>}
+struct VecWF {
+    v: Vec<WeightedFn>,
+}
 
 #[egglog_ty]
-struct VecHitBox {v:Vec<HitBox>}
+struct VecHitBox {
+    v: Vec<HitBox>,
+}
 
 #[egglog_ty]
-struct Points { v:Vec<Point>}
-
+struct Points {
+    v: Vec<Point>,
+}
 
 #[egglog_ty]
 enum Ctl {
-    Para{vec_ctl:VecCtl},
-    Seq{vec_ctl:VecCtl},
-    Await{ctl:Box<Ctl>},
-    Atom{anim_atom:AnimAtom},
+    Para { vec_ctl: VecCtl },
+    Seq { vec_ctl: VecCtl },
+    Await { ctl: Box<Ctl> },
+    Atom { anim_atom: AnimAtom },
 }
 #[egglog_ty]
 enum AnimAtom {
@@ -51,22 +58,14 @@ enum AnimAtom {
     },
 }
 #[egglog_ty]
-enum BRabjectInstance{
-    Instance {
-        template:BRabject,
-    }
+enum BRabjectInstance {
+    Instance { template: BRabject },
 }
 
 #[egglog_ty]
 enum BRabject {
-    ColoredShape {
-        shape: Shape,
-        color: Color,
-    },
-    Text {
-        position: Point,
-        content: String,
-    },
+    ColoredShape { shape: Shape, color: Color },
+    Text { position: Point, content: String },
 }
 
 #[egglog_ty]
@@ -81,19 +80,13 @@ enum Color {
 
 #[egglog_ty]
 enum Shape {
-    Polygon {
-        points: Points,
-    },
+    Polygon { points: Points },
 }
 
 #[egglog_ty]
 enum Duration {
-    DurationBySecs {
-        seconds: f64,
-    },
-    DurationByMili {
-        milliseconds: f64,
-    },
+    DurationBySecs { seconds: f64 },
+    DurationByMili { milliseconds: f64 },
 }
 
 #[egglog_ty]
@@ -117,96 +110,66 @@ enum BezierPathBuilder {
         at: Point,
         rest: Box<BezierPathBuilder>,
     },
-    PathEnd{},
+    PathEnd {},
 }
 
 #[egglog_ty]
 enum Offset {
-    DVec3 {
-        x: f64,
-        y: f64,
-        z: f64,
-    },
-    DVec2 {
-        x: f64,
-        y: f64,
-    },
+    DVec3 { x: f64, y: f64, z: f64 },
+    DVec2 { x: f64, y: f64 },
 }
-
 
 #[egglog_ty]
 enum Point {
-    FixedPoint {
-        offset: Offset,
-    },
-    OffsetPoint {
-        offset: Offset,
-        base: Box<Point>,
-    },
-    CurAnchorOf {
-        object: Box<BRabject>,
-    },
-    PointAtIdx {
-        shape: Shape,
-        index: i64,
-    },
+    FixedPoint { offset: Offset },
+    OffsetPoint { offset: Offset, base: Box<Point> },
+    CurAnchorOf { object: Box<BRabject> },
+    PointAtIdx { shape: Shape, index: i64 },
 }
 
 #[egglog_ty]
 enum Weight {
-    W {
-        value: f64,
-    },
+    W { value: f64 },
 }
 
 #[egglog_ty]
 enum BuiltinF {
-    Lerp{},
-    Stay{},
+    Lerp {},
+    Stay {},
 }
 
 #[egglog_ty]
 enum Fn {
-    Builtin {
-        function: BuiltinF,
-    },
-    WasmGuestExtern {
-        name: String,
-    },
+    Builtin { function: BuiltinF },
+    WasmGuestExtern { name: String },
 }
 
 #[egglog_ty]
 enum WeightedFn {
-    WF{f:Fn, w:Weight},  // 作为元组字段
+    WF { f: Fn, w: Weight }, // 作为元组字段
 }
 
 #[egglog_ty]
-enum RateCfg{
-    RateFn {
-        wfs : VecWF
-    }
+enum RateCfg {
+    RateFn { wfs: VecWF },
 }
 
 #[egglog_ty]
-enum Path{
+enum Path {
     BezierPath {
-        bezier_path_builder:BezierPathBuilder
-    }
+        bezier_path_builder: BezierPathBuilder,
+    },
 }
 
 #[egglog_ty]
-enum HitBox{
-    ShapedBox {
-        shape:Shape
-    },
-    HitBoxs {
-        histboxs: VecHitBox
-    }
+enum HitBox {
+    ShapedBox { shape: Shape },
+    HitBoxs { histboxs: VecHitBox },
 }
 
-pub fn collect_type_defs() -> String{
+pub fn collect_type_defs() -> String {
     let mut s = "".to_owned();
-    for sort in inventory::iter::<Sort>{
+    for sort in inventory::iter::<Sort> {
         s.push_str(sort.0);
     }
     format!("(set-option interactive_mode 1)(datatype* {} )", s)

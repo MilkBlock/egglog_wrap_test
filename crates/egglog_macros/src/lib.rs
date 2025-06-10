@@ -1,14 +1,14 @@
 use core::panic;
 
-use heck::{ ToSnakeCase};
+use heck::ToSnakeCase;
 use helper::*;
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, Data, DeriveInput, Type};
+use quote::{ToTokens, format_ident, quote};
+use syn::{Data, DeriveInput, Type, parse_macro_input};
 mod helper;
 
 /// generate `egglog` language from `rust native structure`   
-/// 
+///
 /// # Example:  
 ///     
 /// ```
@@ -23,9 +23,9 @@ mod helper;
 ///     },
 /// }
 /// ```
-/// is transformed to 
-/// 
-/// 
+/// is transformed to
+///
+///
 /// ```
 /// #[derive(Debug, Clone, ::derive_more::Deref)]
 /// pub struct DurationNode {
@@ -33,7 +33,7 @@ mod helper;
 ///     #[deref]
 ///     sym: DurationSym,
 /// }
-/// 
+///
 /// fn to_egglog(&self) -> String {
 ///     match &self.ty {
 ///         _DurationNode::DurationBySecs { seconds } => {
@@ -50,34 +50,38 @@ mod helper;
 /// }
 /// ```
 /// so that you can directly use to_egglog to generate let statement in eggglog
-/// 
+///
 /// also there is a type def statement generated and specialized new function
-/// 
-/// 
+///
+///
 #[proc_macro_attribute]
-pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
+pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let name = &input.ident;
-    
-    let name_lowercase = format_ident!("{}",name.to_string().to_lowercase());
-    let name_egglogty_impl = format_ident!("{}Ty",name);
+
+    let name_lowercase = format_ident!("{}", name.to_string().to_lowercase());
+    let name_egglogty_impl = format_ident!("{}Ty", name);
     let egglog_wrapper_path = egglog_wrapper_path();
     let inventory_path = inventory_wrapper_path();
 
     // MARK: TYPE_DEF
     let type_def_expanded = match &input.data {
         Data::Enum(data_enum) => {
-            let variants_egglog = data_enum.variants.iter().map(|variant|{
-                let tys = variant_to_tys(&variant);
-                let variant_name = &variant.ident;
-                quote!{  (#variant_name #(#tys )* )}
-            }).collect::<Vec<_>>();
+            let variants_egglog = data_enum
+                .variants
+                .iter()
+                .map(|variant| {
+                    let tys = variant_to_tys(&variant);
+                    let variant_name = &variant.ident;
+                    quote! {  (#variant_name #(#tys )* )}
+                })
+                .collect::<Vec<_>>();
             let expanded = quote! {
                 use #egglog_wrapper_path::wrap::*;
                 impl EgglogTy for #name_egglogty_impl {
                     const TY_NAME:&'static str = stringify!(#name);
                     const TY_NAME_LOWER:&'static str = stringify!(#name_lowercase);
-                    const SORT_DEF: Sort= 
+                    const SORT_DEF: Sort=
                         Sort(stringify!(
                             (#name
                                 #(#variants_egglog)*
@@ -87,17 +91,21 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                 #inventory_path::submit!{#name_egglogty_impl::SORT_DEF}
             };
             expanded
-        },
+        }
         Data::Struct(data_struct) => {
             // process (sort A (Vec M))  such things ..
-            let f = data_struct.fields.iter().nth(0).expect("Struct should only have one Vec field");
+            let f = data_struct
+                .fields
+                .iter()
+                .nth(0)
+                .expect("Struct should only have one Vec field");
             let first_generic = get_first_generic(&f.ty);
-            if is_vec_type(&f.ty){
+            if is_vec_type(&f.ty) {
                 let vec_expanded = quote! {
                     impl #egglog_wrapper_path::wrap::EgglogTy for #name_egglogty_impl {
                         const TY_NAME:&'static str = stringify!(#name);
                         const TY_NAME_LOWER:&'static str = stringify!(#name_lowercase);
-                        const SORT_DEF: Sort= 
+                        const SORT_DEF: Sort=
                             Sort(stringify!(
                                 (sort #name (Vec #first_generic))
                             ));
@@ -105,55 +113,71 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                     #inventory_path::submit!{#name_egglogty_impl::SORT_DEF}
                 };
                 vec_expanded
-            }else {
+            } else {
                 panic!("only support Vec for struct")
             }
-        },
+        }
         _ => panic!("only support enum"),
     };
-    let struct_def_expanded = match &input.data{
+    let struct_def_expanded = match &input.data {
         // MARK: STRUCT_EXPAND
         Data::Struct(data_struct) => {
             // process (sort A (Vec M))  such things ..
-            let name_node_alias = format_ident!("{}NodeAlias",name);
-            let name_node = format_ident!("{}",name);
-            let name_inner = format_ident!("{}Inner",name);
+            let name_node_alias = format_ident!("{}NodeAlias", name);
+            let name_node = format_ident!("{}", name);
+            let name_inner = format_ident!("{}Inner", name);
             // let name_snakecase = format_ident!("{}",name.to_string().to_snake_case());
-            let name_counter = format_ident!("{}_COUNTER",name.to_string().to_uppercase());
+            let name_counter = format_ident!("{}_COUNTER", name.to_string().to_uppercase());
             // let derive_more_path  = derive_more_path();
-            let f = data_struct.fields.iter().nth(0).expect("Struct should only have one Vec field");
+            let f = data_struct
+                .fields
+                .iter()
+                .nth(0)
+                .expect("Struct should only have one Vec field");
             let field_name = &f.ident.as_ref().unwrap();
             let first_generic = get_first_generic(&f.ty);
             // let field_sym_ty = get_sym_type(first_generic);
-            let (field_node_ty,is_basic_ty) = match first_generic.to_token_stream().to_string().as_str(){
-                x if PANIC_TY_LIST.contains(&x) => {
-                    panic!("{} not supported",x)
-                }
-                x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
-                    (first_generic.to_token_stream(),true)
-                }
-                _=>{
-                    let first_generic_ident = match &first_generic{
-                        syn::Type::Path(type_path) => {type_path.path.segments.last().expect("impossible").clone().ident},
-                        _ => panic!("{} type should be simple path",first_generic.to_token_stream().to_string()),
-                    };
-                    let _first_generic = format_ident!("{}",first_generic_ident);
-                    // postfix_type(&first_generic,"Node",Some("T")
-                    (quote!(dyn AsRef<#_first_generic<R, ()>>),false)
-                }
-            };
-            let to_egglog_impl = if is_basic_ty{
-                quote!{
+            let (field_node_ty, is_basic_ty) =
+                match first_generic.to_token_stream().to_string().as_str() {
+                    x if PANIC_TY_LIST.contains(&x) => {
+                        panic!("{} not supported", x)
+                    }
+                    x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
+                        (first_generic.to_token_stream(), true)
+                    }
+                    _ => {
+                        let first_generic_ident = match &first_generic {
+                            syn::Type::Path(type_path) => {
+                                type_path
+                                    .path
+                                    .segments
+                                    .last()
+                                    .expect("impossible")
+                                    .clone()
+                                    .ident
+                            }
+                            _ => panic!(
+                                "{} type should be simple path",
+                                first_generic.to_token_stream().to_string()
+                            ),
+                        };
+                        let _first_generic = format_ident!("{}", first_generic_ident);
+                        // postfix_type(&first_generic,"Node",Some("T")
+                        (quote!(dyn AsRef<#_first_generic<R, ()>>), false)
+                    }
+                };
+            let to_egglog_impl = if is_basic_ty {
+                quote! {
                     impl<R:RxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>{
                         fn to_egglog(&self) -> String{
                             format!("(let {} (vec-of {}))",self.node.sym,self.node.ty.v.iter_mut().fold("".to_owned(), |s,item| s+ item.as_str()+" " ))
                         }
                     }
                 }
-            }else {
+            } else {
                 // MARK: TO_EGGLOG
                 // MARK: LOCATE_LATEST
-                quote!{
+                quote! {
                     impl<R:RxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>{
                         fn to_egglog(&self) -> String{
                             format!("(let {} (vec-of {}))",self.node.sym,self.node.ty.v.iter().fold("".to_owned(), |s,item| s+ item.as_str()+" " ))
@@ -171,25 +195,32 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                     }
                 }
             };
-            let field_ty = match first_generic.to_token_stream().to_string().as_str(){
+            let field_ty = match first_generic.to_token_stream().to_string().as_str() {
                 x if PANIC_TY_LIST.contains(&x) => {
-                    panic!("{} not supported",x)
+                    panic!("{} not supported", x)
                 }
-                x if EGGLOG_BASIC_TY_LIST.contains(&x) => {
-                    first_generic.to_token_stream()
-                }
-                _ =>{
-                    let first_generic = match &first_generic{
+                x if EGGLOG_BASIC_TY_LIST.contains(&x) => first_generic.to_token_stream(),
+                _ => {
+                    let first_generic = match &first_generic {
                         Type::Path(type_path) => {
-                            type_path.path.segments.last().expect("impossible").clone().ident
-                        },
-                        _=> panic!("{} keep the type simple!",first_generic.to_token_stream().to_string())
+                            type_path
+                                .path
+                                .segments
+                                .last()
+                                .expect("impossible")
+                                .clone()
+                                .ident
+                        }
+                        _ => panic!(
+                            "{} keep the type simple!",
+                            first_generic.to_token_stream().to_string()
+                        ),
                     };
-                    format_ident!("{}Ty",first_generic).to_token_stream()
+                    format_ident!("{}Ty", first_generic).to_token_stream()
                 }
             };
             // MARK: STRUCT_EXPAND
-            if is_vec_type(&f.ty){
+            if is_vec_type(&f.ty) {
                 let vec_expanded = quote! {
                     pub type #name_node_alias<R,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,V>;
                     #[derive(Clone,Debug)]
@@ -254,74 +285,85 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                     };
                 };
                 vec_expanded
-            }else {
+            } else {
                 panic!("only support Vec for struct")
             }
-        },
-        // transform   enum A{ A1{a:i32} , A2 {b:B}} 
+        }
+        // transform   enum A{ A1{a:i32} , A2 {b:B}}
         // into struct enum ANode { A1{a:I32Sym} A2{b:BSym} }
-        // so here we build 2 struct 
+        // so here we build 2 struct
         // ANode to store nodes
-        // ASym to store symbols 
-        // we don't need to directly use ASym because they can be 
-        
-        // 不好不好，最好是在 .send 那个时候一次性输出 
-        // 这样 new 出来的可以 defref 成 ASym 出来的是 ANode 
+        // ASym to store symbols
+        // we don't need to directly use ASym because they can be
+
+        // 不好不好，最好是在 .send 那个时候一次性输出
+        // 这样 new 出来的可以 defref 成 ASym 出来的是 ANode
         Data::Enum(data_enum) => {
-            let name_node_alias = format_ident!("{}NodeAlias",name);
-            let name_node = format_ident!("{}",name);
-            let _name_node = format_ident!("_{}",name);
-            let name_inner = format_ident!("{}Inner",name);
-            let name_counter = format_ident!("{}_COUNTER",name.to_string().to_uppercase());
+            let name_node_alias = format_ident!("{}NodeAlias", name);
+            let name_node = format_ident!("{}", name);
+            let _name_node = format_ident!("_{}", name);
+            let name_inner = format_ident!("{}Inner", name);
+            let name_counter = format_ident!("{}_COUNTER", name.to_string().to_uppercase());
             // let name_snakecase = format_ident!("{}",name.to_string().to_snake_case());
             // let derive_more_path  = derive_more_path();
 
-            let variants_def_of_node_with_syms = data_enum.variants.iter().map(|variant|{
-                let types_and_idents = variants_to_sym_typed_ident_list(variant);
-                let variant_name = &variant.ident;
-                quote! {#variant_name {#( #types_and_idents ),*  }}
-            }).collect::<Vec<_>>();
+            let variants_def_of_node_with_syms = data_enum
+                .variants
+                .iter()
+                .map(|variant| {
+                    let types_and_idents = variants_to_sym_typed_ident_list(variant);
+                    let variant_name = &variant.ident;
+                    quote! {#variant_name {#( #types_and_idents ),*  }}
+                })
+                .collect::<Vec<_>>();
 
             // MARK: TO_EGGLOG_MATCH_ARMS
-            let to_egglog_match_arms = data_enum.variants.iter().map(|variant|{
-                let variant_idents = variant_to_field_ident(
-                    variant).collect::<Vec<_>>();
+            let to_egglog_match_arms = data_enum.variants.iter().map(|variant| {
+                let variant_idents = variant_to_field_ident(variant).collect::<Vec<_>>();
                 let variant_name = &variant.ident;
                 let s = " {:.3}".repeat(variant_idents.len());
-                let format_str = format!("(let {{}} ({} {}))",variant_name,s);
+                let format_str = format!("(let {{}} ({} {}))", variant_name, s);
                 quote! {#name_inner::#variant_name {#( #variant_idents ),*  } => {
                     format!(#format_str ,self.node.sym, #(#variant_idents),*)
                 }}
             });
             // MARK: LOCATE_LATEST_MATCH_ARMS
-            let locate_latest_match_arms = data_enum.variants.iter().map(|variant|{
-                let variant_idents = variant_to_field_ident(
-                    variant);
+            let locate_latest_match_arms = data_enum.variants.iter().map(|variant| {
+                let variant_idents = variant_to_field_ident(variant);
                 let mapped_variant_idents = variant_to_mapped_ident_list(
                     variant,
-                    |_|{quote! {}},
-                    |x|{quote!{R::locate_latest(#x.detype_mut());}});
+                    |_| {
+                        quote! {}
+                    },
+                    |x| {
+                        quote! {R::locate_latest(#x.detype_mut());}
+                    },
+                );
                 let variant_name = &variant.ident;
                 quote! {
                     #name_inner::#variant_name {#(#variant_idents),* } => {
-                        R::locate_latest(self.node.sym.detype_mut()); 
+                        R::locate_latest(self.node.sym.detype_mut());
                         #(#mapped_variant_idents)*
                     }
                 }
             });
 
             // MARK: LOCATE_NEXT_MATCH_ARMS
-            let locate_next_match_arms = data_enum.variants.iter().map(|variant|{
-                let variant_idents = variant_to_field_ident(
-                    variant);
+            let locate_next_match_arms = data_enum.variants.iter().map(|variant| {
+                let variant_idents = variant_to_field_ident(variant);
                 let mapped_variant_idents = variant_to_mapped_ident_list(
                     variant,
-                    |_|{quote! {}},
-                    |x|{quote!{R::locate_latest(#x.detype_mut());}});
+                    |_| {
+                        quote! {}
+                    },
+                    |x| {
+                        quote! {R::locate_latest(#x.detype_mut());}
+                    },
+                );
                 let variant_name = &variant.ident;
                 quote! {
                     #name_inner::#variant_name {#(#variant_idents),* } => {
-                        R::locate_next(self.node.sym.detype_mut()); 
+                        R::locate_next(self.node.sym.detype_mut());
                         #(#mapped_variant_idents)*
                     }
                 }
@@ -343,10 +385,10 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                 } 
             });
             // MARK: ENUM_DEF
-            let enum_variant_tys_def = data_enum.variants.iter().map(|variant|{
+            let enum_variant_tys_def = data_enum.variants.iter().map(|variant| {
                 let variant_name = &variant.ident;
-                
-                quote! { 
+
+                quote! {
                     #[derive(Clone)]
                     pub struct #variant_name;
                     impl EgglogEnumVariantTy for #variant_name {
@@ -518,8 +560,8 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                         }
                     }
 
-                    impl<R:RxSgl+ VersionCtlSgl + RxCommitSgl,S: EgglogEnumVariantTy> Commit for #name_node<R,S> 
-                    where 
+                    impl<R:RxSgl+ VersionCtlSgl + RxCommitSgl,S: EgglogEnumVariantTy> Commit for #name_node<R,S>
+                    where
                         #name_node<R, S>: EgglogNode
                     {
                         fn commit(&self) {
@@ -533,13 +575,12 @@ pub fn egglog_ty(_attr: TokenStream, item:TokenStream) -> TokenStream {
                 };
             };
             expanded
-        },
+        }
         Data::Union(_) => todo!(),
     };
 
-    TokenStream::from(quote!{
-        #type_def_expanded 
-        #struct_def_expanded 
-        }
-    )
+    TokenStream::from(quote! {
+    #type_def_expanded
+    #struct_def_expanded
+    })
 }
