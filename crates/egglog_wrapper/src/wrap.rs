@@ -307,7 +307,11 @@ pub trait RxCommitSgl {
     fn on_commit<T: EgglogNode + Clone>(node: &T);
 }
 
-impl<Ret: Rx + VersionCtl + RxCommit + 'static, S: SingletonGetter<RetTy = Ret>> RxCommitSgl for S {
+impl<Ret, S> RxCommitSgl for S
+where
+    Ret: Rx + VersionCtl + RxCommit + 'static,
+    S: SingletonGetter<RetTy = Ret>,
+{
     fn on_commit<T: EgglogNode + Clone>(node: &T) {
         S::rx().on_commit(node);
     }

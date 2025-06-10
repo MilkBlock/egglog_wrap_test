@@ -373,8 +373,8 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let field_idents = variants_to_assign_node_field_list(&variant);
                 let variant_name = &variant.ident;
                 let new_fn_name = format_ident!("new_{}",variant_name.to_string().to_snake_case());
-                
-                quote! { 
+
+                quote! {
                     pub fn #new_fn_name(#(#ref_node_list),*) -> #name_node<R,#variant_name>{
                         let ty = #name_inner::#variant_name {#(#field_idents),*  };
                         let node = Node { ty, sym: #name_counter.next_sym(), p:PhantomData, s:PhantomData::<#variant_name>};
@@ -382,7 +382,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         R::on_new(node.to_symnode());
                         node
                     }
-                } 
+                }
             });
             // MARK: ENUM_DEF
             let enum_variant_tys_def = data_enum.variants.iter().map(|variant| {
@@ -424,7 +424,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                     }
                 );
-                let sym_list = variants_to_sym_type_list(variant); 
+                let sym_list = variants_to_sym_type_list(variant);
                 let get_sym_fns = sym_list.iter().zip(field_idents.iter()
                     ).map(
                     |(sym,field_ident)|{
@@ -456,12 +456,12 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 );
 
-                let vec_needed_syms:Vec<_> = 
+                let vec_needed_syms:Vec<_> =
                     variant_to_field_list_without_prefixed_ident_filter_out_basic_ty(variant)
                     .into_iter()
                     .map(|x| format_ident!("{}",x.to_string())).collect();
-                
-                quote! { 
+
+                quote! {
                     impl<R:RxSgl> #name_node<R,#variant_name>{
                         #(
                             #set_fns
@@ -504,7 +504,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                     }
 
-                } 
+                }
             });
 
             // MARK: ENUM_EXPAND
