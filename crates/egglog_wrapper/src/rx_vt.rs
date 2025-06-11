@@ -303,29 +303,30 @@ impl RxCommit for RxVT {
 
         // process new nodes
         let mut news = self.staged_new_map.lock().unwrap();
-        let mut backup_syms = vec![];
+        let mut backup_staged_new_syms = IndexSet::default();
         let len = news.len();
         for (new, new_node) in news.drain(0..len){
             self.add_symnode(SymbolNode::new(new_node.clone_dyn()),false);
-            backup_syms.push(new);
+            backup_staged_new_syms.insert(new);
         }
         // send egglog string to egraph
-        backup_syms.into_iter()
+        backup_staged_new_syms.into_iter()
             .for_each(|sym| self.receive(self.map.get(&sym).unwrap().egglog.to_egglog()));
 
-        // check any absent node
         let all_staged = IndexSet::from_iter(self.staged_set_map.iter().map(|a| *a.key()));
-        let mut panic_list = IndexSet::default();
-        for &sym in &all_staged{
-            if !self.map.contains_key(&sym){
-                panic_list.insert(sym);
-            }
-        }
-        if panic_list.len()>0 {panic!("node {:?} not exist",panic_list )};
+        // // check any absent node
+        // let mut panic_list = IndexSet::default();
+        // for &sym in &all_staged{
+        //     if !self.map.contains_key(&sym){
+        //         panic_list.insert(sym);
+        //     }
+        // }
+        // if panic_list.len()>0 {panic!("node {:?} not exist",panic_list )};
 
         let mut descendants = IndexSet::default();
         self.collect_descendants(node.cur_sym(), &mut descendants);
         descendants.insert(node.cur_sym());
+
 
         let staged_descendants_old = descendants.intersection(&all_staged).collect::<Vec<_>>();
         let staged_descendants_latest = staged_descendants_old.iter().map(|x| self.locate_latest(**x)).collect::<Vec<_>>();
