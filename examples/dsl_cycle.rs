@@ -1,7 +1,7 @@
-use std::path::{MAIN_SEPARATOR, PathBuf};
+use std::path::PathBuf;
 
 use egglog_macros::egglog_ty;
-use egglog_wrapper::{Path, basic_rx_no_vt};
+use egglog_wrapper::basic_rx_no_vt;
 
 #[egglog_ty]
 enum A {

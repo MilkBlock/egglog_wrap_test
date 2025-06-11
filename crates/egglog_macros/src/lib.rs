@@ -247,7 +247,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 let #field_name = #field_name.into_iter().map(|r| r.as_ref().sym).collect();
                                 let node = Node{ ty: #name_inner{v:#field_name}, sym: #name_counter.next_sym(),p: PhantomData, s: PhantomData};
                                 let node = #name_node {node};
-                                R::on_new(node.clone().into());
+                                R::on_new(&node);
                                 node
                             }
                         }
@@ -383,7 +383,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         let ty = #name_inner::#variant_name {#(#field_idents),*  };
                         let node = Node { ty, sym: #name_counter.next_sym(), p:PhantomData, s:PhantomData::<#variant_name>};
                         let node = #name_node {node};
-                        R::on_new(node.clone().into());
+                        R::on_new(&node);
                         node
                     }
                 }
@@ -420,9 +420,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 if let #name_inner::#variant_name{ #(#field_idents),*} = &mut self.node.ty{
                                     *#field_ident = ___sym
                                 };
-                                let mut symnode:SymbolNode = self.clone().into();
-                                symnode.egglog.next_sym();
-                                R::on_set(self.node.sym.erase_mut(),symnode);
+                                R::on_set(self);
                                 self
                             }
                         }
@@ -573,6 +571,9 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     {
                         fn commit(&self) {
                             R::on_commit(self);
+                        }
+                        fn stage(&self) {
+                            R::on_stage(self);
                         }
                     }
 

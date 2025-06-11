@@ -1,6 +1,6 @@
 use crate::{
     collect_type_defs,
-    wrap::{Rx, Sym, SymbolNode},
+    wrap::{EgglogNode, Rx, Sym, SymbolNode},
 };
 use dashmap::DashMap;
 use egglog::{EGraph, SerializeConfig, util::IndexSet};
@@ -42,16 +42,16 @@ impl RxNoVT {
             .unwrap_or_else(|_| panic!("Failed to write dot file to {dot_path:?}"));
     }
     // collect all ancestors of cur_sym, without cur_sym
-    pub fn collect_symnode(&self, cur_sym: Sym, index_set: &mut IndexSet<Sym>) {
-        let sym_node = self.map.get(&cur_sym).unwrap();
-        let v = sym_node.preds.clone();
-        drop(sym_node);
-        for pred in v {
+    pub fn collect_latest_ancestors(&self, cur_sym: Sym, index_set: &mut IndexSet<Sym>) {
+        let symnode = self.map.get(&cur_sym).unwrap();
+        let succss = symnode.preds.clone();
+        drop(symnode);
+        for pred in succss {
             if index_set.contains(&pred) || self.map.get(&pred).unwrap().next.is_some() {
                 // do nothing
             } else {
                 index_set.insert(pred);
-                self.collect_symnode(pred, index_set)
+                self.collect_latest_ancestors(pred, index_set)
             }
         }
     }
@@ -108,10 +108,11 @@ impl RxNoVT {
         }
         cur
     }
-    fn add_symnode(&self, mut symnode: SymbolNode) {
-        self.receive(symnode.egglog.to_egglog());
-        let sym = symnode.cur_sym();
-        for node in symnode.succs_mut() {
+    fn add_symnode(&self, node: &(impl EgglogNode + 'static)) {
+        self.receive(node.to_egglog());
+        let mut node = SymbolNode::new(node.clone_dyn());
+        let sym = node.cur_sym();
+        for node in node.succs_mut() {
             *node = self.map_latest(*node);
             self.map
                 .get_mut(node)
@@ -120,65 +121,68 @@ impl RxNoVT {
                 .push(sym);
         }
         // println!("{:?}",self.map);
-        self.map.insert(symnode.cur_sym(), symnode);
+        self.map.insert(node.cur_sym(), node);
     }
 
     /// update all predecessor recursively in guest and send updated term by egglog repr to host
     /// when you update the node
     /// for non version control mode, update_symnode will update &mut old sym to latest
-    fn update_symnode(&self, old: &mut Sym, mut updated_symnode: SymbolNode) {
+    fn update_symnode(&self, node: &mut (impl EgglogNode+'static)) {
+        let latest_sym = self.map_latest(node.cur_sym());
+        *node.cur_sym_mut() = node.next_sym();
+        let mut updated_symnode = SymbolNode::new(node.clone_dyn());
         let mut index_set = IndexSet::default();
-        *old = self.map_latest(*old);
+
+
         // collect all syms that will change
-        self.collect_symnode(*old, &mut index_set);
-        let mut old_node = self.map.get_mut(old).unwrap();
+        self.collect_latest_ancestors(latest_sym, &mut index_set);
+        let mut latest_node = self.map.get_mut(&latest_sym).unwrap();
         // chain old version and new version
-        old_node.next = Some(updated_symnode.egglog.cur_sym());
-        updated_symnode.preds = old_node.preds.clone();
-        drop(old_node);
-        let mut new_syms = vec![];
-        // update all succs
+        latest_node.next = Some(updated_symnode.egglog.cur_sym());
+        updated_symnode.preds = latest_node.preds.clone();
+        drop(latest_node);
+        let mut next_syms = vec![];
+        // insert copied ancestors
         for &old_sym in index_set.iter() {
             let (_, mut sym_node) = self.map.remove(&old_sym).unwrap();
             let new_sym = sym_node.next_sym();
             self.latest_map.insert(old_sym, new_sym);
 
-            new_syms.push(new_sym);
+            next_syms.push(new_sym);
             self.map.insert(new_sym, sym_node);
         }
-        index_set.insert(*old);
+        index_set.insert(latest_sym);
         let new_sym = updated_symnode.cur_sym();
-        new_syms.push(updated_symnode.cur_sym());
+        next_syms.push(updated_symnode.cur_sym());
         self.map.insert(updated_symnode.cur_sym(), updated_symnode);
         // update all preds
-        for &new_sym in &new_syms {
+        for &new_sym in &next_syms {
             let mut sym_node = self.map.get_mut(&new_sym).unwrap();
             for sym in sym_node.preds_mut() {
                 if let Some(idx) = index_set.get_index_of(&*sym) {
-                    *sym = new_syms[idx];
+                    *sym = next_syms[idx];
                 }
             }
             for sym in sym_node.succs_mut() {
                 if let Some(idx) = index_set.get_index_of(&*sym) {
-                    *sym = new_syms[idx];
+                    *sym = next_syms[idx];
                 }
             }
         }
         let mut s = "".to_owned();
         let topo = self.topo_sort(
             IndexSet::from_iter(Some(new_sym).into_iter()),
-            &IndexSet::from_iter(new_syms.into_iter()),
+            &IndexSet::from_iter(next_syms.into_iter()),
         );
         for new_sym in topo {
             s += self.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
         }
         self.receive(s);
-        *old = new_sym;
     }
 
-    fn update_symnodes(&self, _start_iter: impl Iterator<Item = (Sym, SymbolNode)>) {
-        todo!()
-    }
+    // fn update_symnodes(&self, _start_iter: impl Iterator<Item = (Sym, SymbolNode)>) {
+    //     todo!()
+    // }
 }
 
 unsafe impl Send for RxNoVT {}
@@ -190,11 +194,11 @@ impl Rx for RxNoVT {
         self.interpret(received);
     }
 
-    fn on_new(&self, symnode: SymbolNode) {
+    fn on_new(&self, symnode: &(impl crate::wrap::EgglogNode + 'static)) {
         self.add_symnode(symnode);
     }
-
-    fn on_set(&self, old: &mut Sym, symnode: SymbolNode) {
-        self.update_symnode(old, symnode);
+    
+    fn on_set(&self, symnode: &mut (impl crate::wrap::EgglogNode + 'static)) {
+        self.update_symnode(symnode);
     }
 }

@@ -11,8 +11,8 @@ use symbol_table::GlobalSymbol;
 
 pub trait Rx: 'static {
     fn receive(&self, received: String);
-    fn on_new(&self, symnode: SymbolNode);
-    fn on_set(&self, old: &mut Sym, symnode: SymbolNode);
+    fn on_new(&self, symnode: &(impl EgglogNode + 'static));
+    fn on_set(&self, symnode: &mut (impl EgglogNode + 'static));
 }
 
 pub trait SingletonGetter {
@@ -23,19 +23,19 @@ pub trait SingletonGetter {
 pub trait RxSgl: 'static {
     // delegate all functions from LetStmtRxInner
     fn receive(received: String);
-    fn on_new(symnode: SymbolNode);
-    fn on_set(old: &mut Sym, symnode: SymbolNode);
+    fn on_new(symnode: &(impl EgglogNode + 'static));
+    fn on_set(symnode: &mut (impl EgglogNode + 'static));
 }
 
 impl<R: Rx + 'static, T: SingletonGetter<RetTy = R> + 'static> RxSgl for T {
     fn receive(received: String) {
         Self::rx().receive(received);
     }
-    fn on_new(symnode: SymbolNode) {
+    fn on_new(symnode: &(impl EgglogNode + 'static)) {
         Self::rx().on_new(symnode);
     }
-    fn on_set(old: &mut Sym, symnode: SymbolNode) {
-        Self::rx().on_set(old, symnode);
+    fn on_set(symnode: &mut (impl EgglogNode + 'static)) {
+        Self::rx().on_set(symnode);
     }
 }
 
@@ -263,7 +263,7 @@ impl fmt::Debug for SymbolNode {
     }
 }
 impl SymbolNode {
-    pub fn new(_: Sym, node: Box<dyn EgglogNode>) -> Self {
+    pub fn new(node: Box<dyn EgglogNode>) -> Self {
         Self {
             preds: Syms::default(),
             egglog: node,
@@ -322,11 +322,13 @@ impl Syms {
 /// Rx::commit(&self, node);
 /// ```
 pub trait RxCommit {
-    fn on_commit<T: EgglogNode + Clone>(&self, node: &T);
+    fn on_commit<T: EgglogNode>(&self, node: &T);
+    fn on_stage<T: EgglogNode + ?Sized>(&self, node: &T);
 }
 
 pub trait RxCommitSgl {
-    fn on_commit<T: EgglogNode + Clone>(node: &T);
+    fn on_commit<T: EgglogNode>(node: &T);
+    fn on_stage<T: EgglogNode>(node: &T);
 }
 
 impl<Ret, S> RxCommitSgl for S
@@ -334,8 +336,12 @@ where
     Ret: Rx + VersionCtl + RxCommit,
     S: SingletonGetter<RetTy = Ret>,
 {
-    fn on_commit<T: EgglogNode + Clone>(node: &T) {
+    fn on_commit<T: EgglogNode>(node: &T) {
         S::rx().on_commit(node);
+    }
+    
+    fn on_stage<T: EgglogNode>(node: &T) {
+        S::rx().on_stage(node);
     }
 }
 
@@ -350,6 +356,7 @@ where
 /// ```
 pub trait Commit {
     fn commit(&self);
+    fn stage(&self);
 }
 
 /// In Egglog there are 2 ways to interact with egraph
@@ -367,7 +374,7 @@ pub trait Interpreter {
 
 impl<T: EgglogNode + Clone + 'static> From<T> for SymbolNode {
     fn from(value: T) -> Self {
-        SymbolNode::new(value.cur_sym(), Box::new(value.clone()))
+        SymbolNode::new(Box::new(value.clone()))
     }
 }
 
