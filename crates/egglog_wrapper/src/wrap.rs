@@ -138,8 +138,8 @@ where
 {
     pub ty: I,
     pub sym: Sym<T>,
-    pub p: PhantomData<R>,
-    pub s: PhantomData<S>,
+    pub _p: PhantomData<R>,
+    pub _s: PhantomData<S>,
 }
 
 /// allow type erasure on S

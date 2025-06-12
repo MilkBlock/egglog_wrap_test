@@ -22,12 +22,15 @@ fn main() {
 
     v1.set_num(4).stage();
     eq0.commit();
+    println!("cur version of v1 is {}",v1.sym);
     MyRx::rx().to_dot(PathBuf::from_str("egraph1").unwrap());
 
     v0.set_num(4).stage();
     eq0.commit();
+    println!("cur version of v0 is {}",v0.sym);
     MyRx::rx().to_dot(PathBuf::from_str("egraph2").unwrap());
 
 }
 
 basic_rx_vt!(MyRx);
+

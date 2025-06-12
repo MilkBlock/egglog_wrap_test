@@ -245,7 +245,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         impl<R:RxSgl> #name_node<R,()> {
                             pub fn new(#field_name:Vec<&#field_node_ty>) -> #name_node<R,()>{
                                 let #field_name = #field_name.into_iter().map(|r| r.as_ref().sym).collect();
-                                let node = Node{ ty: #name_inner{v:#field_name}, sym: #name_counter.next_sym(),p: PhantomData, s: PhantomData};
+                                let node = Node{ ty: #name_inner{v:#field_name}, sym: #name_counter.next_sym(),_p: PhantomData, _s: PhantomData};
                                 let node = #name_node {node};
                                 R::on_new(&node);
                                 node
@@ -282,7 +282,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                         impl<R:RxSgl,V:EgglogEnumVariantTy > Clone for #name_node<R,V> {
                             fn clone(&self) -> Self {
-                                Self { node: Node { ty: self.node.ty.clone(), sym: self.node.sym.clone(), p: PhantomData, s: PhantomData }  }
+                                Self { node: Node { ty: self.node.ty.clone(), sym: self.node.sym.clone(), _p: PhantomData, _s: PhantomData }  }
                             }
                         }
                         #to_egglog_impl
@@ -381,7 +381,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 quote! {
                     pub fn #new_fn_name(#(#ref_node_list),*) -> #name_node<R,#variant_name>{
                         let ty = #name_inner::#variant_name {#(#field_idents),*  };
-                        let node = Node { ty, sym: #name_counter.next_sym(), p:PhantomData, s:PhantomData::<#variant_name>};
+                        let node = Node { ty, sym: #name_counter.next_sym(), _p:PhantomData, _s:PhantomData::<#variant_name>};
                         let node = #name_node {node};
                         R::on_new(&node);
                         node
@@ -561,7 +561,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                     impl<R:RxSgl,V:EgglogEnumVariantTy > Clone for #name_node<R,V> {
                         fn clone(&self) -> Self {
-                            Self { node: Node { ty: self.ty.clone(), sym: self.sym.clone(), p: PhantomData, s: PhantomData }  }
+                            Self { node: Node { ty: self.ty.clone(), sym: self.sym.clone(), _p: PhantomData, _s: PhantomData }  }
                         }
                     }
 
