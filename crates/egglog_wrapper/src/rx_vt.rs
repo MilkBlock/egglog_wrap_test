@@ -1,6 +1,6 @@
 use crate::{
-    collect_type_defs,
-    wrap::{EgglogNode, Rx, RxCommit, Sym, SymbolNode, VersionCtl},
+    collect_string_type_defs,
+    wrap::{EgglogNode, Rx, RxCommit, Sym, WorkAreaNode, VersionCtl},
 };
 use dashmap::DashMap;
 use derive_more::Display;
@@ -10,7 +10,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Mutex};
 #[derive(Default)]
 pub struct RxVT {
     egraph: Mutex<EGraph>,
-    map: DashMap<Sym, SymbolNode>,
+    map: DashMap<Sym, WorkAreaNode>,
     /// used to store staged node of committed nodes (Not only the currently latest node but also nodes of old versions)
     staged_set_map : DashMap<Sym, Box<dyn EgglogNode>>,
     staged_new_map : Mutex<IndexMap<Sym,Box<dyn EgglogNode>>>,
@@ -152,11 +152,11 @@ impl RxVT {
         }
     }
     pub fn new() -> Self {
-        Self::new_with_type_defs(collect_type_defs())
+        Self::new_with_type_defs(collect_string_type_defs())
     }
-    fn add_symnode(&self, mut symnode: SymbolNode, auto_latest:bool) {
-        let sym = symnode.cur_sym();
-        for node in symnode.succs_mut() {
+    fn add_node(&self, mut node: WorkAreaNode, auto_latest:bool) {
+        let sym = node.cur_sym();
+        for node in node.succs_mut() {
             println!("succ is {}",node);
             let latest =if auto_latest{
                 &self.locate_latest(*node)
@@ -170,14 +170,14 @@ impl RxVT {
                 .push(sym);
             *node = *latest;
         }
-        self.map.insert(symnode.cur_sym(), symnode);
+        self.map.insert(node.cur_sym(), node);
     }
 
     /// update all ancestors recursively in guest and send updated term by egglog string repr to host
     /// when you update the node
     /// This is version control mode impl so we will not change &mut old sym.
     /// return all symnodes created
-    fn update_symnodes(&self, root:Sym,staged_latest_syms_and_staged_nodes: Vec<(Sym, Box<dyn EgglogNode>)>) -> IndexSet<Sym>{
+    fn update_nodes(&self, root:Sym,staged_latest_syms_and_staged_nodes: Vec<(Sym, Box<dyn EgglogNode>)>) -> IndexSet<Sym>{
         // collect all ancestors that need copy
         let mut ancestors = IndexSet::default();
         for (latest_sym,_) in &staged_latest_syms_and_staged_nodes{
@@ -218,7 +218,7 @@ impl RxVT {
                 let mut staged_node = staged_latest_sym_map.get(&ancestor).unwrap().clone_dyn();
                 *staged_node.cur_sym_mut()  = next_sym;
 
-                let mut staged_sym_node = SymbolNode::new(staged_node);
+                let mut staged_sym_node = WorkAreaNode::new(staged_node);
                 staged_sym_node.preds = self.map.get(&ancestor).unwrap().preds.clone();
                 self.map.insert(next_sym, staged_sym_node);
             }
@@ -332,7 +332,7 @@ impl RxCommit for RxVT {
         let mut backup_staged_new_syms = IndexSet::default();
         let len = news.len();
         for (new, new_node) in news.drain(0..len){
-            self.add_symnode(SymbolNode::new(new_node.clone_dyn()),false);
+            self.add_node(WorkAreaNode::new(new_node.clone_dyn()),false);
             backup_staged_new_syms.insert(new);
         }
         // send egglog string to egraph
@@ -360,7 +360,7 @@ impl RxCommit for RxVT {
         let iter_impl = 
             staged_descendants_latest.iter().cloned().zip(
                 staged_descendants_old.iter().map(|x|self.staged_set_map.remove(*x).unwrap().1));
-        let created = self.update_symnodes(commit_root.cur_sym(),iter_impl.collect());
+        let created = self.update_nodes(commit_root.cur_sym(),iter_impl.collect());
         println!("created {:#?}",created);
 
         println!("nodes to topo:{:?}",created);

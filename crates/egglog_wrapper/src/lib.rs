@@ -5,6 +5,7 @@ pub mod rx;
 pub mod rx_vt;
 pub mod wrap;
 pub use smallvec;
+pub mod rx_minimal;
 
 // Type aliases for Vec types
 #[egglog_ty]
@@ -167,10 +168,10 @@ enum HitBox {
     HitBoxs { histboxs: VecHitBox },
 }
 
-pub fn collect_type_defs() -> String {
+pub fn collect_string_type_defs() -> String {
     let mut s = "".to_owned();
     for sort in inventory::iter::<Sort> {
         s.push_str(sort.0);
     }
-    format!("(set-option interactive_mode 1)(datatype* {} )", s)
+    s
 }

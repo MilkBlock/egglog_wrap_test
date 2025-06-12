@@ -5,7 +5,7 @@ use std::{
 };
 
 use egglog_macros::egglog_ty;
-use egglog_wrapper::{basic_rx_no_vt, collect_type_defs, rx::RxNoVT};
+use egglog_wrapper::{basic_rx_no_vt, collect_string_type_defs, rx::RxNoVT};
 // use egglog_wrapper::wrap::Sort;
 
 #[egglog_ty]

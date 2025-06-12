@@ -1,6 +1,6 @@
 use crate::{
-    collect_type_defs,
-    wrap::{EgglogNode, Rx, Sym, SymbolNode},
+    collect_string_type_defs,
+    wrap::{EgglogNode, Rx, Sym, WorkAreaNode},
 };
 use dashmap::DashMap;
 use egglog::{EGraph, SerializeConfig, util::IndexSet};
@@ -8,7 +8,7 @@ use std::{path::PathBuf, sync::Mutex};
 
 pub struct RxNoVT {
     egraph: Mutex<EGraph>,
-    map: DashMap<Sym, SymbolNode>,
+    map: DashMap<Sym, WorkAreaNode>,
     latest_map: DashMap<Sym, Sym>,
 }
 
@@ -27,7 +27,7 @@ impl RxNoVT {
         }
     }
     pub fn new() -> Self {
-        Self::new_with_type_defs(collect_type_defs())
+        Self::new_with_type_defs(collect_string_type_defs())
     }
     pub fn interpret(&self, s: String) {
         let mut egraph = self.egraph.lock().unwrap();
@@ -43,9 +43,9 @@ impl RxNoVT {
     }
     // collect all ancestors of cur_sym, without cur_sym
     pub fn collect_latest_ancestors(&self, cur_sym: Sym, index_set: &mut IndexSet<Sym>) {
-        let symnode = self.map.get(&cur_sym).unwrap();
-        let succss = symnode.preds.clone();
-        drop(symnode);
+        let node = self.map.get(&cur_sym).unwrap();
+        let succss = node.preds.clone();
+        drop(node);
         for pred in succss {
             if index_set.contains(&pred) || self.map.get(&pred).unwrap().next.is_some() {
                 // do nothing
@@ -108,15 +108,15 @@ impl RxNoVT {
         }
         cur
     }
-    fn add_symnode(&self, node: &(impl EgglogNode + 'static)) {
+    fn add_node(&self, node: &(impl EgglogNode + 'static)) {
         self.receive(node.to_egglog());
-        let mut node = SymbolNode::new(node.clone_dyn());
+        let mut node = WorkAreaNode::new(node.clone_dyn());
         let sym = node.cur_sym();
-        for node in node.succs_mut() {
-            *node = self.map_latest(*node);
+        for succ_node in node.succs_mut() {
+            *succ_node = self.map_latest(*succ_node);
             self.map
-                .get_mut(node)
-                .unwrap_or_else(|| panic!("node {} not found", node.as_str()))
+                .get_mut(succ_node)
+                .unwrap_or_else(|| panic!("node {} not found", succ_node.as_str()))
                 .preds
                 .push(sym);
         }
@@ -130,7 +130,7 @@ impl RxNoVT {
     fn update_symnode(&self, node: &mut (impl EgglogNode+'static)) {
         let latest_sym = self.map_latest(node.cur_sym());
         *node.cur_sym_mut() = node.next_sym();
-        let mut updated_symnode = SymbolNode::new(node.clone_dyn());
+        let mut updated_symnode = WorkAreaNode::new(node.clone_dyn());
         let mut index_set = IndexSet::default();
 
 
@@ -195,7 +195,7 @@ impl Rx for RxNoVT {
     }
 
     fn on_new(&self, symnode: &(impl crate::wrap::EgglogNode + 'static)) {
-        self.add_symnode(symnode);
+        self.add_node(symnode);
     }
     
     fn on_set(&self, symnode: &mut (impl crate::wrap::EgglogNode + 'static)) {

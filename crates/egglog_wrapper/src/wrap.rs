@@ -11,8 +11,8 @@ use symbol_table::GlobalSymbol;
 
 pub trait Rx: 'static {
     fn receive(&self, received: String);
-    fn on_new(&self, symnode: &(impl EgglogNode + 'static));
-    fn on_set(&self, symnode: &mut (impl EgglogNode + 'static));
+    fn on_new(&self, node: &(impl EgglogNode + 'static));
+    fn on_set(&self, node: &mut (impl EgglogNode + 'static));
 }
 
 pub trait SingletonGetter {
@@ -23,19 +23,19 @@ pub trait SingletonGetter {
 pub trait RxSgl: 'static {
     // delegate all functions from LetStmtRxInner
     fn receive(received: String);
-    fn on_new(symnode: &(impl EgglogNode + 'static));
-    fn on_set(symnode: &mut (impl EgglogNode + 'static));
+    fn on_new(node: &(impl EgglogNode + 'static));
+    fn on_set(node: &mut (impl EgglogNode + 'static));
 }
 
 impl<R: Rx + 'static, T: SingletonGetter<RetTy = R> + 'static> RxSgl for T {
     fn receive(received: String) {
         Self::rx().receive(received);
     }
-    fn on_new(symnode: &(impl EgglogNode + 'static)) {
-        Self::rx().on_new(symnode);
+    fn on_new(node: &(impl EgglogNode + 'static)) {
+        Self::rx().on_new(node);
     }
-    fn on_set(symnode: &mut (impl EgglogNode + 'static)) {
-        Self::rx().on_set(symnode);
+    fn on_set(node: &mut (impl EgglogNode + 'static)) {
+        Self::rx().on_set(node);
     }
 }
 
@@ -236,7 +236,7 @@ impl EgglogEnumVariantTy for () {
 }
 
 #[derive(DerefMut, Deref)]
-pub struct SymbolNode {
+pub struct WorkAreaNode {
     pub next: Option<Sym>,
     pub preds: Syms,
     #[deref]
@@ -244,7 +244,7 @@ pub struct SymbolNode {
     pub egglog: Box<dyn EgglogNode>,
 }
 
-impl Clone for SymbolNode {
+impl Clone for WorkAreaNode {
     fn clone(&self) -> Self {
         Self {
             next: self.next.clone(),
@@ -253,7 +253,7 @@ impl Clone for SymbolNode {
         }
     }
 }
-impl fmt::Debug for SymbolNode {
+impl fmt::Debug for WorkAreaNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SymbolNode")
             .field("preds", &self.preds)
@@ -262,7 +262,7 @@ impl fmt::Debug for SymbolNode {
             .finish()
     }
 }
-impl SymbolNode {
+impl WorkAreaNode {
     pub fn new(node: Box<dyn EgglogNode>) -> Self {
         Self {
             preds: Syms::default(),
@@ -372,9 +372,9 @@ pub trait Interpreter {
 
 // pub trait EgglogNodeMarker{ }
 
-impl<T: EgglogNode + Clone + 'static> From<T> for SymbolNode {
+impl<T: EgglogNode + Clone + 'static> From<T> for WorkAreaNode {
     fn from(value: T) -> Self {
-        SymbolNode::new(Box::new(value.clone()))
+        WorkAreaNode::new(Box::new(value.clone()))
     }
 }
 
