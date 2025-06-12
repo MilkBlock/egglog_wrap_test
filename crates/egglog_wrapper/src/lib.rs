@@ -173,5 +173,5 @@ pub fn collect_string_type_defs() -> String {
     for sort in inventory::iter::<Sort> {
         s.push_str(sort.0);
     }
-    s
+    format!("(datatype* {} )", s)
 }
