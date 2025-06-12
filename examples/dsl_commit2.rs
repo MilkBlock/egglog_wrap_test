@@ -14,18 +14,22 @@ enum Var {
 }
 
 fn main() {
-    let v0 = Var::<MyRx>::new_var_item(1);
+    let mut v0 = Var::<MyRx>::new_var_item(1);
     let mut v1 = Var::new_var_item(1);
     let eq0 = Eq::new_eq_item(&v0, &v1);
     eq0.commit();
+    MyRx::rx().to_dot(PathBuf::from_str("egraph0").unwrap());
 
-    println!("before set {}",v1.to_egglog());
     v1.set_num(4);
-    println!("after set {}",v1.to_egglog());
     v1.stage();
     eq0.commit();
+    MyRx::rx().to_dot(PathBuf::from_str("egraph1").unwrap());
 
-    MyRx::rx().to_dot(PathBuf::from_str("egraph").unwrap());
+    v0.set_num(4);
+    v0.stage();
+    eq0.commit();
+    MyRx::rx().to_dot(PathBuf::from_str("egraph2").unwrap());
+
 }
 
 basic_rx_vt!(MyRx);
