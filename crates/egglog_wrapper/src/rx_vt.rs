@@ -36,6 +36,7 @@ pub enum TopoDirection {
 /// Rx with version ctl feature
 impl RxVT {
     pub fn interpret(&self, s: String) {
+        println!("{}",s);
         let mut egraph = self.egraph.lock().unwrap();
         egraph.parse_and_run_program(None, s.as_str()).unwrap();
     }
@@ -118,11 +119,12 @@ impl RxVT {
             let popped = wait_for_release.pop().unwrap();
             println!("popped is {} preds:{:?}",popped, &self.map.get(&popped).unwrap().preds);
             for target in &self.map.get(&popped).unwrap().preds {
-                let idx = index_set.get_index_of(target).unwrap();
-                outs[idx] -= 1;
-                if outs[idx] == 0 {
-                    println!("{} found to be 0", target);
-                    wait_for_release.push(*target);
+                if let Some(idx) = index_set.get_index_of(target){
+                    outs[idx] -= 1;
+                    if outs[idx] == 0 {
+                        println!("{} found to be 0", target);
+                        wait_for_release.push(*target);
+                    }
                 }
             }
             rst.push(popped);
@@ -187,6 +189,9 @@ impl RxVT {
         }
         let mut root_ancestors = IndexSet::default();
         self.collect_ancestors(root, &mut root_ancestors);
+        if !root_ancestors.is_empty(){
+            panic!("commit should be applied to root");
+        }
         root_ancestors.insert(root);
         let mut root_descendants  = IndexSet::default();
         self.collect_descendants(root, &mut root_descendants);
@@ -299,7 +304,6 @@ impl VersionCtl for RxVT {
 // MARK: Receiver
 impl Rx for RxVT {
     fn receive(&self, received: String) {
-        println!("{}", received);
         self.interpret(received);
     }
 

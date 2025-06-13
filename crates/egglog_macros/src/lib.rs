@@ -1,11 +1,83 @@
 use core::panic;
+use darling::{Error, FromMeta, ast::NestedMeta};
 
 use heck::ToSnakeCase;
 use helper::*;
-use proc_macro::TokenStream;
+use proc_macro2::{Ident};
+use proc_macro::{TokenStream};
 use quote::{ToTokens, format_ident, quote};
 use syn::{Data, DeriveInput, Type, parse_macro_input};
 mod helper;
+
+
+#[derive(Debug, FromMeta)]
+struct SceneMeta {
+    output: Ident
+}
+#[proc_macro_attribute]
+pub fn egglog_func(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    let name = &input.ident;
+
+    let attr_args = match NestedMeta::parse_meta_list(attr.into()) {
+        Ok(v) => v,
+        Err(e) => return TokenStream::from(Error::from(e).write_errors()),
+    };
+    let args = match SceneMeta::from_list(&attr_args) {
+        Ok(v) => v,
+        Err(e) => return TokenStream::from(e.write_errors()),
+    };
+
+    let output= args.output;
+    let struct_def_expanded = match &input.data {
+        Data::Struct(data_struct) => {
+            let name_node = format_ident!("{}", name);
+            // let derive_more_path  = derive_more_path();
+            let types = data_struct
+                .fields.iter().map(|field|&field.ty).collect::<Vec<_>>();
+            let _generic_decl = data_struct
+                .fields.iter().enumerate().map(|(count,field)|{
+                    let generic = format_ident!("T{}",count);
+                    let ty = &field.ty;
+                    quote!(#generic:AsRef<#ty>)
+            }).collect::<Vec<_>>();
+            let generics = data_struct
+                .fields.iter().enumerate().map(|(count,_field)|{
+                    format_ident!("T{}",count)
+            }).collect::<Vec<_>>();
+
+            let inventory_path = inventory_wrapper_path();
+            let _merge_option:proc_macro2::TokenStream = "no-merge".to_token_stream();
+            let merge_option:proc_macro2::TokenStream = "merge new".to_token_stream();
+            quote! {
+                struct #name_node<T>{_p:std::marker::PhantomData<T>}
+                impl<'a, R:RxSgl> EgglogFunc<'a,R> for #name_node<R>{ 
+                    type Output=#output<R,()>;
+                    type Input=(#(&'a #types<R,()>,)*);
+                    const FUNC_NAME:&'static str = stringify!(#name_node);
+                }
+                impl<'a, R:RxSgl> #name_node<R>{
+                    fn set(input: (#(&'a impl AsRef<#types<R,()>>,)*), output: &impl AsRef<#output<R,()>>){
+                        let egglog_string ={let (#(ref #generics,)*) = input;
+                        let mut parts = Vec::<&str>::new();
+                        #(
+                            parts.push(#generics.as_ref().cur_sym().as_str());
+                        )*
+                        parts.join(" ")};
+                        R::receive(format!("(set ({}) {} {})",Self::FUNC_NAME, egglog_string, output.as_ref().cur_sym()));
+                    }
+                }
+                #inventory_path::submit!{
+                    FuncSort(
+                        concat!( "(", stringify!( function #name_node (#(#types )*)  #output:),#merge_option,")")
+                    )
+                }
+            }.into()
+        }
+        _ => {panic!()}
+    };
+    struct_def_expanded
+}
 
 /// generate `egglog` language from `rust native structure`   
 ///
@@ -45,8 +117,8 @@ mod helper;
 ///     }
 /// }
 /// impl crate::EgglogTy for Duration {
-///     const SORT_DEF: crate::Sort =
-///         crate::Sort(stringify!((Duration(DurationBySecs f64)(DurationByMili f64))));
+///     const SORT_DEF: crate::TySort =
+///         crate::TySort(stringify!((Duration()(DurationByMili f64))));
 /// }
 /// ```
 /// so that you can directly use to_egglog to generate let statement in eggglog
@@ -64,7 +136,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let egglog_wrapper_path = egglog_wrapper_path();
     let inventory_path = inventory_wrapper_path();
 
-    // MARK: TYPE_DEF
     let type_def_expanded = match &input.data {
         Data::Enum(data_enum) => {
             let variants_egglog = data_enum
@@ -81,8 +152,8 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 impl EgglogTy for #name_egglogty_impl {
                     const TY_NAME:&'static str = stringify!(#name);
                     const TY_NAME_LOWER:&'static str = stringify!(#name_lowercase);
-                    const SORT_DEF: Sort=
-                        Sort(stringify!(
+                    const SORT_DEF: TySort=
+                        TySort(stringify!(
                             (#name
                                 #(#variants_egglog)*
                             )
@@ -105,8 +176,8 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     impl #egglog_wrapper_path::wrap::EgglogTy for #name_egglogty_impl {
                         const TY_NAME:&'static str = stringify!(#name);
                         const TY_NAME_LOWER:&'static str = stringify!(#name_lowercase);
-                        const SORT_DEF: Sort=
-                            Sort(stringify!(
+                        const SORT_DEF: TySort=
+                            TySort(stringify!(
                                 (sort #name (Vec #first_generic))
                             ));
                     }
@@ -120,7 +191,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
         _ => panic!("only support enum"),
     };
     let struct_def_expanded = match &input.data {
-        // MARK: STRUCT_EXPAND
         Data::Struct(data_struct) => {
             // process (sort A (Vec M))  such things ..
             let name_node_alias = format_ident!("{}NodeAlias", name);
@@ -176,8 +246,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 }
             } else {
-                // MARK: TO_EGGLOG
-                // MARK: LOCATE_LATEST
                 quote! {
                     impl<R:RxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>
                     where #name_node<R,V>: EgglogNode{
@@ -223,7 +291,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     format_ident!("{}Ty", first_generic).to_token_stream()
                 }
             };
-            // MARK: STRUCT_EXPAND
             if is_vec_type(&f.ty) {
                 let vec_expanded = quote! {
                     pub type #name_node_alias<R,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,V>;
@@ -321,7 +388,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 })
                 .collect::<Vec<_>>();
 
-            // MARK: TO_EGGLOG_MATCH_ARMS
             let to_egglog_match_arms = data_enum.variants.iter().map(|variant| {
                 let variant_idents = variant_to_field_ident(variant).collect::<Vec<_>>();
                 let variant_name = &variant.ident;
@@ -331,7 +397,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     format!(#format_str ,self.node.sym, #(#variant_idents),*)
                 }}
             });
-            // MARK: LOCATE_LATEST_MATCH_ARMS
             let locate_latest_match_arms = data_enum.variants.iter().map(|variant| {
                 let variant_idents = variant_to_field_ident(variant);
                 let mapped_variant_idents = variant_to_mapped_ident_list(
@@ -352,7 +417,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             });
 
-            // MARK: LOCATE_NEXT_MATCH_ARMS
             let locate_next_match_arms = data_enum.variants.iter().map(|variant| {
                 let variant_idents = variant_to_field_ident(variant);
                 let mapped_variant_idents = variant_to_mapped_ident_list(
@@ -388,7 +452,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 }
             });
-            // MARK: ENUM_DEF
             let enum_variant_tys_def = data_enum.variants.iter().map(|variant| {
                 let variant_name = &variant.ident;
 
@@ -401,7 +464,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             });
 
-            // MARK: SET_GET_FNS
             let set_fns = data_enum.variants.iter().map(|variant|{
                 let ref_node_list = variant_to_ref_node_list(&variant,&name);
                 let assign_node_field_list = variants_to_assign_node_field_list_without_prefixed_ident(&variant);
@@ -509,7 +571,6 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             });
 
-            // MARK: ENUM_EXPAND
             let expanded = quote! {
                 pub type #name_node_alias<R,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,V>;
                 #[derive(derive_more::Deref,)]
@@ -529,6 +590,28 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #(#enum_variant_tys_def)*
                     impl<R:RxSgl> #name_node<R,()> {
                         #(#fns)*
+                    }
+                    impl<R:RxSgl> EgglogNode for #name_node<R,()> {
+                        fn succs_mut(&mut self) -> Vec<&mut Sym>{
+                            vec![]
+                        }
+                        fn succs(&self) -> Vec<Sym>{
+                            vec![]
+                        }
+                        fn next_sym(&mut self) -> Sym{
+                            let next_sym = #name_counter.next_sym();
+                            self.node.sym = next_sym;
+                            next_sym.erase()
+                        }
+                        fn cur_sym(&self) -> Sym{
+                            self.node.sym.erase()
+                        }
+                        fn cur_sym_mut(&mut self) -> &mut Sym{
+                            self.node.sym.erase_mut()
+                        }
+                        fn clone_dyn(&self) -> Box<dyn EgglogNode>{
+                            Box::new(self.clone())
+                        }
                     }
                     impl<R:RxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>
                     where #name_node<R,V>: EgglogNode{

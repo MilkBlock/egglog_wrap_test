@@ -75,12 +75,14 @@ impl<Ret: Rx + VersionCtl + 'static, S: SingletonGetter<RetTy = Ret>> VersionCtl
 pub trait EgglogTy {
     const TY_NAME: &'static str;
     const TY_NAME_LOWER: &'static str;
-    const SORT_DEF: Sort;
+    const SORT_DEF: TySort;
 }
 pub trait UpdateCounter<T: EgglogTy> {
     fn inc_counter(&mut self, counter: &mut TyCounter<T>) -> Sym<T>;
 }
-pub struct Sort(pub &'static str);
+pub struct TySort(pub &'static str);
+pub struct FuncSort(pub &'static str);
+pub struct RelationSort(pub &'static str);
 
 impl<T> Sym<T> {
     pub fn erase(&self) -> Sym<()> {
@@ -122,7 +124,9 @@ pub trait EgglogNode: ToEgglog + 'static {
 }
 
 // collect all sorts into inventory, so that we could send the definitions of types.
-inventory::collect!(Sort);
+inventory::collect!(TySort);
+inventory::collect!(FuncSort);
+inventory::collect!(RelationSort);
 
 pub trait EgglogEnumVariantTy: Clone + 'static {
     const TY_NAME: &'static str;
@@ -159,7 +163,7 @@ where
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 pub struct Sym<T = ()> {
     pub inner: GlobalSymbol,
     pub p: PhantomData<T>,
@@ -378,3 +382,8 @@ impl<T: EgglogNode + Clone + 'static> From<T> for WorkAreaNode {
     }
 }
 
+pub trait EgglogFunc<'a, R: RxSgl> {
+    type Input;
+    type Output: EgglogNode;
+    const FUNC_NAME:&'static str;
+}

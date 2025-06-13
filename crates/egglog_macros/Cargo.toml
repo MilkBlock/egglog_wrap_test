@@ -12,3 +12,4 @@ quote = "1.0"
 proc-macro2 = "1.0"
 proc-macro-crate = "3.3.0"
 heck.workspace = true
+darling = "0.20.11"

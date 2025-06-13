@@ -1,5 +1,5 @@
 pub use derive_more;
-use egglog_macros::egglog_ty;
+use egglog_macros::{egglog_func, egglog_ty};
 pub mod macros;
 pub mod rx;
 pub mod rx_vt;
@@ -168,10 +168,22 @@ enum HitBox {
     HitBoxs { histboxs: VecHitBox },
 }
 
-pub fn collect_string_type_defs() -> String {
-    let mut s = "".to_owned();
-    for sort in inventory::iter::<Sort> {
-        s.push_str(sort.0);
-    }
-    format!("(datatype* {} )", s)
+#[egglog_func(output = Ctl)]
+struct CurrentTimeline{
 }
+
+
+
+pub fn collect_string_type_defs() -> String {
+    let mut ty_defs = "".to_owned();
+    for sort in inventory::iter::<TySort> {
+        ty_defs.push_str(sort.0);
+    }
+    let mut func_defs = "".to_owned();
+    for sort in inventory::iter::<FuncSort> {
+        func_defs.push_str(sort.0);
+    }
+    format!("(datatype* {} ) {}", ty_defs, func_defs)
+}
+
+
