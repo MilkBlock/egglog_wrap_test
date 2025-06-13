@@ -59,7 +59,7 @@ pub fn egglog_func(attr: TokenStream, item: TokenStream) -> TokenStream {
             let merge_option: proc_macro2::TokenStream = "merge new".to_token_stream();
             quote! {
                 pub struct #name_node<T>{_p:std::marker::PhantomData<T>}
-                impl<'a, R:RxSgl> EgglogFunc<'a,R> for #name_node<R>{
+                impl<'a, R:RxSgl> egglog_wrapper::wrap::EgglogFunc<'a,R> for #name_node<R>{
                     type Output=#output<R,()>;
                     type Input=(#(&'a #types<R,()>,)*);
                     const FUNC_NAME:&'static str = stringify!(#name_node);

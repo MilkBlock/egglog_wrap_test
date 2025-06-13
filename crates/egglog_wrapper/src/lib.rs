@@ -1,5 +1,4 @@
 pub use derive_more;
-use egglog_macros::{egglog_func, egglog_ty};
 pub mod macros;
 pub mod rx;
 pub mod rx_vt;

@@ -53,7 +53,11 @@ impl Rx for RxMinimal {
         self.interpret(received);
     }
 
-    fn on_new(&self, _node: &(impl crate::wrap::EgglogNode + 'static)) {}
+    fn on_new(&self, node: &(impl crate::wrap::EgglogNode + 'static)) {
+        self.interpret(node.to_egglog());
+    }
 
-    fn on_set(&self, _node: &mut (impl crate::wrap::EgglogNode + 'static)) {}
+    fn on_set(&self, _node: &mut (impl crate::wrap::EgglogNode + 'static)) {
+        panic!("set is unsupported for rx_minimal")
+    }
 }
