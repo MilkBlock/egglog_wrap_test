@@ -1,4 +1,3 @@
-
 use egglog_macros::{egglog_func, egglog_ty};
 use egglog_wrapper::basic_rx_vt;
 
@@ -19,7 +18,7 @@ enum Root {
 }
 
 #[egglog_func(output=Root)]
-struct Selected{ }
+struct Selected {}
 
 fn main() {
     let node1 = Cons::new_value(1, &Cons::<MyRx>::new_end());

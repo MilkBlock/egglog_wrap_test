@@ -1,12 +1,6 @@
 use derive_more::{Debug, Deref, DerefMut, IntoIterator};
 use smallvec::SmallVec;
-use std::{
-    borrow::Borrow,
-    fmt,
-    hash::Hash,
-    marker::PhantomData,
-    sync::atomic::AtomicU32,
-};
+use std::{borrow::Borrow, fmt, hash::Hash, marker::PhantomData, sync::atomic::AtomicU32};
 use symbol_table::GlobalSymbol;
 
 pub trait Rx: 'static {
@@ -44,8 +38,10 @@ impl<R: Rx + 'static, T: SingletonGetter<RetTy = R> + 'static> RxSgl for T {
 pub trait VersionCtl {
     fn locate_latest(&self, node: Sym) -> Sym;
     fn locate_next(&self, node: Sym) -> Sym;
+    fn locate_prev(&self, node: Sym) -> Sym;
     fn set_latest(&self, node: &mut Sym);
     fn set_next(&self, node: &mut Sym);
+    fn set_prev(&self, node: &mut Sym);
 }
 
 /// version control triat
@@ -53,8 +49,10 @@ pub trait VersionCtl {
 pub trait VersionCtlSgl {
     fn locate_latest(node: Sym) -> Sym;
     fn locate_next(node: Sym) -> Sym;
+    fn locate_prev(node: Sym) -> Sym;
     fn set_latest(node: &mut Sym);
     fn set_next(node: &mut Sym);
+    fn set_prev(node: &mut Sym);
 }
 
 impl<Ret: Rx + VersionCtl + 'static, S: SingletonGetter<RetTy = Ret>> VersionCtlSgl for S {
@@ -64,11 +62,17 @@ impl<Ret: Rx + VersionCtl + 'static, S: SingletonGetter<RetTy = Ret>> VersionCtl
     fn locate_next(node: Sym) -> Sym {
         Self::rx().locate_next(node)
     }
+    fn locate_prev(node: Sym) -> Sym {
+        Self::rx().locate_prev(node)
+    }
     fn set_latest(node: &mut Sym) {
         Self::rx().set_latest(node)
     }
     fn set_next(node: &mut Sym) {
         Self::rx().set_next(node)
+    }
+    fn set_prev(node: &mut Sym) {
+        Self::rx().set_prev(node)
     }
 }
 
@@ -109,6 +113,7 @@ pub trait ToEgglog {
 pub trait LocateVersion {
     fn locate_latest(&mut self);
     fn locate_next(&mut self);
+    fn locate_prev(&mut self);
 }
 /// trait of node behavior
 pub trait EgglogNode: ToEgglog + 'static {
@@ -242,6 +247,7 @@ impl EgglogEnumVariantTy for () {
 #[derive(DerefMut, Deref)]
 pub struct WorkAreaNode {
     pub next: Option<Sym>,
+    pub prev: Option<Sym>,
     pub preds: Syms,
     #[deref]
     #[deref_mut]
@@ -254,13 +260,15 @@ impl Clone for WorkAreaNode {
             next: self.next.clone(),
             preds: self.preds.clone(),
             egglog: self.egglog.clone_dyn(),
+            prev: None,
         }
     }
 }
 impl fmt::Debug for WorkAreaNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SymbolNode")
+        f.debug_struct("WorkAreaNode")
             .field("preds", &self.preds)
+            .field("prev", &self.prev)
             .field("sym", &self.egglog.cur_sym())
             .field("succs", &self.egglog.succs())
             .finish()
@@ -272,6 +280,7 @@ impl WorkAreaNode {
             preds: Syms::default(),
             egglog: node,
             next: None,
+            prev: None,
         }
     }
     pub fn succs_mut(&mut self) -> impl Iterator<Item = &mut Sym> {
@@ -343,7 +352,7 @@ where
     fn on_commit<T: EgglogNode>(node: &T) {
         S::rx().on_commit(node);
     }
-    
+
     fn on_stage<T: EgglogNode>(node: &T) {
         S::rx().on_stage(node);
     }
@@ -385,5 +394,5 @@ impl<T: EgglogNode + Clone + 'static> From<T> for WorkAreaNode {
 pub trait EgglogFunc<'a, R: RxSgl> {
     type Input;
     type Output: EgglogNode;
-    const FUNC_NAME:&'static str;
+    const FUNC_NAME: &'static str;
 }

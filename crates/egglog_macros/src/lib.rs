@@ -3,16 +3,15 @@ use darling::{Error, FromMeta, ast::NestedMeta};
 
 use heck::ToSnakeCase;
 use helper::*;
-use proc_macro2::{Ident};
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
+use proc_macro2::Ident;
 use quote::{ToTokens, format_ident, quote};
 use syn::{Data, DeriveInput, Type, parse_macro_input};
 mod helper;
 
-
 #[derive(Debug, FromMeta)]
 struct SceneMeta {
-    output: Ident
+    output: Ident,
 }
 #[proc_macro_attribute]
 pub fn egglog_func(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -28,36 +27,45 @@ pub fn egglog_func(attr: TokenStream, item: TokenStream) -> TokenStream {
         Err(e) => return TokenStream::from(e.write_errors()),
     };
 
-    let output= args.output;
+    let output = args.output;
     let struct_def_expanded = match &input.data {
         Data::Struct(data_struct) => {
             let name_node = format_ident!("{}", name);
             // let derive_more_path  = derive_more_path();
             let types = data_struct
-                .fields.iter().map(|field|&field.ty).collect::<Vec<_>>();
+                .fields
+                .iter()
+                .map(|field| &field.ty)
+                .collect::<Vec<_>>();
             let _generic_decl = data_struct
-                .fields.iter().enumerate().map(|(count,field)|{
-                    let generic = format_ident!("T{}",count);
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(count, field)| {
+                    let generic = format_ident!("T{}", count);
                     let ty = &field.ty;
                     quote!(#generic:AsRef<#ty>)
-            }).collect::<Vec<_>>();
+                })
+                .collect::<Vec<_>>();
             let generics = data_struct
-                .fields.iter().enumerate().map(|(count,_field)|{
-                    format_ident!("T{}",count)
-            }).collect::<Vec<_>>();
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(count, _field)| format_ident!("T{}", count))
+                .collect::<Vec<_>>();
 
             let inventory_path = inventory_wrapper_path();
-            let _merge_option:proc_macro2::TokenStream = "no-merge".to_token_stream();
-            let merge_option:proc_macro2::TokenStream = "merge new".to_token_stream();
+            let _merge_option: proc_macro2::TokenStream = "no-merge".to_token_stream();
+            let merge_option: proc_macro2::TokenStream = "merge new".to_token_stream();
             quote! {
-                struct #name_node<T>{_p:std::marker::PhantomData<T>}
-                impl<'a, R:RxSgl> EgglogFunc<'a,R> for #name_node<R>{ 
+                pub struct #name_node<T>{_p:std::marker::PhantomData<T>}
+                impl<'a, R:RxSgl> EgglogFunc<'a,R> for #name_node<R>{
                     type Output=#output<R,()>;
                     type Input=(#(&'a #types<R,()>,)*);
                     const FUNC_NAME:&'static str = stringify!(#name_node);
                 }
                 impl<'a, R:RxSgl> #name_node<R>{
-                    fn set(input: (#(&'a impl AsRef<#types<R,()>>,)*), output: &impl AsRef<#output<R,()>>){
+                    pub fn set(input: (#(&'a impl AsRef<#types<R,()>>,)*), output: &impl AsRef<#output<R,()>>){
                         let egglog_string ={let (#(ref #generics,)*) = input;
                         let mut parts = Vec::<&str>::new();
                         #(
@@ -74,7 +82,9 @@ pub fn egglog_func(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             }.into()
         }
-        _ => {panic!()}
+        _ => {
+            panic!()
+        }
     };
     struct_def_expanded
 }
@@ -264,6 +274,10 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             R::set_next(self.cur_sym_mut());
                             self.node.ty.v.iter_mut().for_each(|item| {R::set_next(item.erase_mut())});
                         }
+                        fn locate_prev(&mut self){
+                            R::set_prev(self.cur_sym_mut());
+                            self.node.ty.v.iter_mut().for_each(|item| {R::set_next(item.erase_mut())});
+                        }
                     }
                 }
             };
@@ -432,6 +446,25 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 quote! {
                     #name_inner::#variant_name {#(#variant_idents),* } => {
                         R::set_next(self.node.sym.erase_mut());
+                        #(#mapped_variant_idents)*
+                    }
+                }
+            });
+            let locate_prev_match_arms = data_enum.variants.iter().map(|variant| {
+                let variant_idents = variant_to_field_ident(variant);
+                let mapped_variant_idents = variant_to_mapped_ident_list(
+                    variant,
+                    |_| {
+                        quote! {}
+                    },
+                    |x| {
+                        quote! {R::set_prev(#x.erase_mut());}
+                    },
+                );
+                let variant_name = &variant.ident;
+                quote! {
+                    #name_inner::#variant_name {#(#variant_idents),* } => {
+                        R::set_prev(self.node.sym.erase_mut());
                         #(#mapped_variant_idents)*
                     }
                 }
@@ -631,6 +664,11 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         fn locate_next(&mut self) {
                             match &mut self.node.ty{
                                 #(#locate_next_match_arms),*
+                            }
+                        }
+                        fn locate_prev(&mut self) {
+                            match &mut self.node.ty{
+                                #(#locate_prev_match_arms),*
                             }
                         }
                     }

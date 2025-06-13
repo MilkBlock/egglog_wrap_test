@@ -1,10 +1,13 @@
 use crate::{
     collect_string_type_defs,
-    wrap::{EgglogNode, Rx, RxCommit, Sym, WorkAreaNode, VersionCtl},
+    wrap::{EgglogNode, Rx, RxCommit, Sym, VersionCtl, WorkAreaNode},
 };
 use dashmap::DashMap;
 use derive_more::Display;
-use egglog::{util::{IndexMap, IndexSet}, EGraph, SerializeConfig};
+use egglog::{
+    EGraph, SerializeConfig,
+    util::{IndexMap, IndexSet},
+};
 use std::{collections::HashMap, path::PathBuf, sync::Mutex};
 
 #[derive(Default)]
@@ -12,8 +15,8 @@ pub struct RxVT {
     egraph: Mutex<EGraph>,
     map: DashMap<Sym, WorkAreaNode>,
     /// used to store staged node of committed nodes (Not only the currently latest node but also nodes of old versions)
-    staged_set_map : DashMap<Sym, Box<dyn EgglogNode>>,
-    staged_new_map : Mutex<IndexMap<Sym,Box<dyn EgglogNode>>>,
+    staged_set_map: DashMap<Sym, Box<dyn EgglogNode>>,
+    staged_new_map: Mutex<IndexMap<Sym, Box<dyn EgglogNode>>>,
     checkpoints: Mutex<Vec<CommitCheckPoint>>,
 }
 
@@ -36,7 +39,7 @@ pub enum TopoDirection {
 /// Rx with version ctl feature
 impl RxVT {
     pub fn interpret(&self, s: String) {
-        println!("{}",s);
+        println!("{}", s);
         let mut egraph = self.egraph.lock().unwrap();
         egraph.parse_and_run_program(None, s.as_str()).unwrap();
     }
@@ -80,7 +83,11 @@ impl RxVT {
     }
     // collect all strict descendants of cur_sym, without cur_sym
     pub fn collect_descendants(&self, cur_sym: Sym, index_set: &mut IndexSet<Sym>) {
-        let succs = self.staged_set_map.get(&cur_sym).map(|x|x.succs()).unwrap_or(self.map.get(&cur_sym).unwrap().succs()) ;
+        let succs = self
+            .staged_set_map
+            .get(&cur_sym)
+            .map(|x| x.succs())
+            .unwrap_or(self.map.get(&cur_sym).unwrap().succs());
         for succ in succs {
             if index_set.contains(&succ) || self.map.get(&succ).unwrap().next.is_some() {
                 // do nothing this succ node has been accessed
@@ -117,9 +124,13 @@ impl RxVT {
         }
         while !wait_for_release.is_empty() {
             let popped = wait_for_release.pop().unwrap();
-            println!("popped is {} preds:{:?}",popped, &self.map.get(&popped).unwrap().preds);
+            println!(
+                "popped is {} preds:{:?}",
+                popped,
+                &self.map.get(&popped).unwrap().preds
+            );
             for target in &self.map.get(&popped).unwrap().preds {
-                if let Some(idx) = index_set.get_index_of(target){
+                if let Some(idx) = index_set.get_index_of(target) {
                     outs[idx] -= 1;
                     if outs[idx] == 0 {
                         println!("{} found to be 0", target);
@@ -129,7 +140,7 @@ impl RxVT {
             }
             rst.push(popped);
         }
-        println!("{:?}",rst);
+        println!("{:?}", rst);
         rst
     }
     /// calculate the edges in the subgraph
@@ -156,13 +167,13 @@ impl RxVT {
     pub fn new() -> Self {
         Self::new_with_type_defs(collect_string_type_defs())
     }
-    fn add_node(&self, mut node: WorkAreaNode, auto_latest:bool) {
+    fn add_node(&self, mut node: WorkAreaNode, auto_latest: bool) {
         let sym = node.cur_sym();
         for node in node.succs_mut() {
-            println!("succ is {}",node);
-            let latest =if auto_latest{
+            println!("succ is {}", node);
+            let latest = if auto_latest {
                 &self.locate_latest(*node)
-            }else {
+            } else {
                 &*node
             };
             self.map
@@ -177,55 +188,69 @@ impl RxVT {
 
     /// update all ancestors recursively in guest and send updated term by egglog string repr to host
     /// when you update the node
-    /// This is version control mode impl so we will not change &mut old sym.
-    /// return all symnodes created
-    fn update_nodes(&self, root:Sym,staged_latest_syms_and_staged_nodes: Vec<(Sym, Box<dyn EgglogNode>)>) -> IndexSet<Sym>{
+    /// return all WorkAreaNodes created
+    fn update_nodes(
+        &self,
+        root: Sym,
+        staged_latest_syms_and_staged_nodes: Vec<(Sym, Box<dyn EgglogNode>)>,
+    ) -> IndexSet<Sym> {
         // collect all ancestors that need copy
         let mut ancestors = IndexSet::default();
-        for (latest_sym,_) in &staged_latest_syms_and_staged_nodes{
-            println!("collect ancestors of {:?}",latest_sym);
+        for (latest_sym, _) in &staged_latest_syms_and_staged_nodes {
+            println!("collect ancestors of {:?}", latest_sym);
             // self.collect_latest_ancestors(*latest_sym, &mut latest_ancestors);
             self.collect_ancestors(*latest_sym, &mut ancestors);
         }
         let mut root_ancestors = IndexSet::default();
         self.collect_ancestors(root, &mut root_ancestors);
-        if !root_ancestors.is_empty(){
+        if !root_ancestors.is_empty() {
             panic!("commit should be applied to root");
         }
         root_ancestors.insert(root);
-        let mut root_descendants  = IndexSet::default();
+        let mut root_descendants = IndexSet::default();
         self.collect_descendants(root, &mut root_descendants);
         root_descendants.insert(root);
-        let intersection = IndexSet::from_iter(ancestors.intersection(&root_descendants).cloned().into_iter());
-        let mut ancestors = IndexSet::from_iter(intersection.union(&root_ancestors).into_iter().cloned());
-        
-        
+        let intersection = IndexSet::from_iter(
+            ancestors
+                .intersection(&root_descendants)
+                .cloned()
+                .into_iter(),
+        );
+        let mut ancestors =
+            IndexSet::from_iter(intersection.union(&root_ancestors).into_iter().cloned());
         let mut staged_latest_sym_map = IndexMap::default();
         // here we insert all staged_latest_sym because latest_ancestors do may not include all of them
-        for (staged_latest_sym, staged_node) in staged_latest_syms_and_staged_nodes{
+        for (staged_latest_sym, staged_node) in staged_latest_syms_and_staged_nodes {
             ancestors.insert(staged_latest_sym);
             staged_latest_sym_map.insert(staged_latest_sym, staged_node);
         }
+
+        // NB: ancestors set now contains all nodes that need to create
         println!("all latest_ancestors {:?}", ancestors);
 
         let mut next_syms = IndexSet::default();
-        for ancestor in ancestors{
+        for ancestor in ancestors {
             let mut latest_node = self.map.get_mut(&self.locate_latest(ancestor)).unwrap();
+            let latest_sym = latest_node.cur_sym();
             let next_sym = latest_node.next_sym();
-            let next_latest_node = latest_node.clone();
-            // chain old version and new version
+            let mut next_latest_node = latest_node.clone();
+            // set prev, chain next latest version to latest version
+            next_latest_node.prev = Some(latest_sym);
+            // set next, chain latest version to next latest version
             latest_node.next = Some(next_sym);
             drop(latest_node);
             next_syms.insert(next_sym);
-            if !staged_latest_sym_map.contains_key(&ancestor){
+            if !staged_latest_sym_map.contains_key(&ancestor) {
                 self.map.insert(next_sym, next_latest_node);
-            }else{
+            } else {
                 let mut staged_node = staged_latest_sym_map.get(&ancestor).unwrap().clone_dyn();
-                *staged_node.cur_sym_mut()  = next_sym;
+                *staged_node.cur_sym_mut() = next_sym;
 
-                let mut staged_sym_node = WorkAreaNode::new(staged_node);
-                staged_sym_node.preds = self.map.get(&ancestor).unwrap().preds.clone();
-                self.map.insert(next_sym, staged_sym_node);
+                let mut staged_node = WorkAreaNode::new(staged_node);
+                // set prev, chain next latest version to latest version
+                staged_node.prev = Some(latest_sym);
+                staged_node.preds = self.map.get(&ancestor).unwrap().preds.clone();
+                self.map.insert(next_sym, staged_node);
             }
         }
 
@@ -233,35 +258,35 @@ impl RxVT {
         let mut succ_preds_map = HashMap::new();
         for &next_sym in &next_syms {
             let sym_node = self.map.get(&next_sym).unwrap();
-            for &sym in  sym_node.preds(){
+            for &sym in sym_node.preds() {
                 let latest_sym = self.locate_latest(sym);
-                if sym != latest_sym && !succ_preds_map.contains_key(&latest_sym){
+                if sym != latest_sym && !succ_preds_map.contains_key(&latest_sym) {
                     succ_preds_map.insert(sym, latest_sym);
                 }
             }
             for sym in sym_node.succs() {
                 let latest_sym = self.locate_latest(sym);
-                if sym != latest_sym && !succ_preds_map.contains_key(&latest_sym){
+                if sym != latest_sym && !succ_preds_map.contains_key(&latest_sym) {
                     succ_preds_map.insert(sym, latest_sym);
                 }
             }
         }
-        println!("preds 「map」to be {:?}",succ_preds_map);
+        println!("preds 「map」to be {:?}", succ_preds_map);
 
         for &next_sym in &next_syms {
             let mut sym_node = self.map.get_mut(&next_sym).unwrap();
-            for sym in sym_node.preds_mut(){
-                if let Some(found) = succ_preds_map.get(sym){
+            for sym in sym_node.preds_mut() {
+                if let Some(found) = succ_preds_map.get(sym) {
                     *sym = *found;
                 }
             }
-            for sym in sym_node.succs_mut(){
-                if let Some(found) = succ_preds_map.get(sym){
+            for sym in sym_node.succs_mut() {
+                if let Some(found) = succ_preds_map.get(sym) {
                     *sym = *found;
                 }
             }
         }
-        println!("{:#?}",self.map);
+        println!("{:#?}", self.map);
 
         next_syms
     }
@@ -281,9 +306,9 @@ impl VersionCtl for RxVT {
     }
 
     // locate next version
-    fn locate_next(&self, old: Sym) -> Sym {
+    fn locate_next(&self, node: Sym) -> Sym {
         let map = &self.map;
-        let mut cur = old;
+        let mut cur = node;
         if let Some(newer) = map.get(&cur).unwrap().next {
             cur = newer;
         } else {
@@ -299,6 +324,19 @@ impl VersionCtl for RxVT {
     fn set_next(&self, node: &mut Sym) {
         *node = self.locate_next(*node);
     }
+    fn locate_prev(&self, node: Sym) -> Sym {
+        let map = &self.map;
+        let mut cur = node;
+        if let Some(older) = map.get(&cur).unwrap().prev {
+            cur = older;
+        } else {
+            // do nothing because current version is the oldest
+        }
+        cur
+    }
+    fn set_prev(&self, node: &mut Sym) {
+        *node = self.locate_prev(*node);
+    }
 }
 
 // MARK: Receiver
@@ -308,7 +346,10 @@ impl Rx for RxVT {
     }
 
     fn on_new(&self, node: &(impl EgglogNode + 'static)) {
-        self.staged_new_map.lock().unwrap().insert(node.cur_sym(), node.clone_dyn());
+        self.staged_new_map
+            .lock()
+            .unwrap()
+            .insert(node.cur_sym(), node.clone_dyn());
     }
 
     fn on_set(&self, _node: &mut (impl EgglogNode + 'static)) {
@@ -325,22 +366,28 @@ impl RxCommit for RxVT {
         let check_point = CommitCheckPoint {
             committed_node_root: commit_root.cur_sym(),
             staged_set_nodes: self.staged_set_map.iter().map(|a| *a.key()).collect(),
-            staged_new_nodes: self.staged_new_map.lock().unwrap().iter().map(|a| *a.0).collect(),
+            staged_new_nodes: self
+                .staged_new_map
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|a| *a.0)
+                .collect(),
         };
-        println!("{}",check_point);
+        println!("{}", check_point);
         self.checkpoints.lock().unwrap().push(check_point);
-
 
         // process new nodes
         let mut news = self.staged_new_map.lock().unwrap();
         let mut backup_staged_new_syms = IndexSet::default();
         let len = news.len();
-        for (new, new_node) in news.drain(0..len){
-            self.add_node(WorkAreaNode::new(new_node.clone_dyn()),false);
+        for (new, new_node) in news.drain(0..len) {
+            self.add_node(WorkAreaNode::new(new_node.clone_dyn()), false);
             backup_staged_new_syms.insert(new);
         }
         // send egglog string to egraph
-        backup_staged_new_syms.into_iter()
+        backup_staged_new_syms
+            .into_iter()
             .for_each(|sym| self.receive(self.map.get(&sym).unwrap().egglog.to_egglog()));
 
         let all_staged = IndexSet::from_iter(self.staged_set_map.iter().map(|a| *a.key()));
@@ -357,25 +404,26 @@ impl RxCommit for RxVT {
         self.collect_descendants(commit_root.cur_sym(), &mut descendants);
         descendants.insert(commit_root.cur_sym());
 
-
         let staged_descendants_old = descendants.intersection(&all_staged).collect::<Vec<_>>();
-        let staged_descendants_latest = staged_descendants_old.iter().map(|x| self.locate_latest(**x)).collect::<Vec<_>>();
+        let staged_descendants_latest = staged_descendants_old
+            .iter()
+            .map(|x| self.locate_latest(**x))
+            .collect::<Vec<_>>();
 
-        let iter_impl = 
-            staged_descendants_latest.iter().cloned().zip(
-                staged_descendants_old.iter().map(|x|self.staged_set_map.remove(*x).unwrap().1));
-        let created = self.update_nodes(commit_root.cur_sym(),iter_impl.collect());
-        println!("created {:#?}",created);
+        let iter_impl = staged_descendants_latest.iter().cloned().zip(
+            staged_descendants_old
+                .iter()
+                .map(|x| self.staged_set_map.remove(*x).unwrap().1),
+        );
+        let created = self.update_nodes(commit_root.cur_sym(), iter_impl.collect());
+        println!("created {:#?}", created);
 
-        println!("nodes to topo:{:?}",created);
+        println!("nodes to topo:{:?}", created);
         self.topo_sort(&created, TopoDirection::Up)
             .into_iter()
-            .for_each(
-                |sym| self.receive(self.map.get(&sym).unwrap().egglog.to_egglog())
-            );
-
+            .for_each(|sym| self.receive(self.map.get(&sym).unwrap().egglog.to_egglog()));
     }
-    
+
     fn on_stage<T: EgglogNode + ?Sized>(&self, node: &T) {
         self.staged_set_map.insert(node.cur_sym(), node.clone_dyn());
     }

@@ -12,7 +12,7 @@ pub struct RxNoVT {
     latest_map: DashMap<Sym, Sym>,
 }
 
-/// Rx with version ctl feature
+/// Rx without version ctl feature
 impl RxNoVT {
     pub fn new_with_type_defs(type_defs: String) -> Self {
         Self {
@@ -127,12 +127,11 @@ impl RxNoVT {
     /// update all predecessor recursively in guest and send updated term by egglog repr to host
     /// when you update the node
     /// for non version control mode, update_symnode will update &mut old sym to latest
-    fn update_symnode(&self, node: &mut (impl EgglogNode+'static)) {
+    fn update_symnode(&self, node: &mut (impl EgglogNode + 'static)) {
         let latest_sym = self.map_latest(node.cur_sym());
         *node.cur_sym_mut() = node.next_sym();
         let mut updated_symnode = WorkAreaNode::new(node.clone_dyn());
         let mut index_set = IndexSet::default();
-
 
         // collect all syms that will change
         self.collect_latest_ancestors(latest_sym, &mut index_set);
@@ -197,7 +196,7 @@ impl Rx for RxNoVT {
     fn on_new(&self, symnode: &(impl crate::wrap::EgglogNode + 'static)) {
         self.add_node(symnode);
     }
-    
+
     fn on_set(&self, symnode: &mut (impl crate::wrap::EgglogNode + 'static)) {
         self.update_symnode(symnode);
     }

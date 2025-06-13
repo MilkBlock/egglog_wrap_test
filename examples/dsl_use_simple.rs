@@ -22,9 +22,6 @@ fn main() {
     let node2 = Cons::new_value(2, &node1);
     let node3 = Cons::new_value(1, &node2);
     let root = Root::new_v(&VecCon::new(vec![&node1, &node2, &node3]));
-    {
-        node2
-    };
     let m = root.cur_sym();
     MyRx::rx().to_dot("egraph.dot".into());
 }

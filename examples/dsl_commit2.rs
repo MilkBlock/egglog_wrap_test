@@ -10,13 +10,13 @@ enum Eq {
 #[egglog_ty]
 enum Var {
     VarItem { num: i64 },
-    Expr { eq:Eq}
+    Expr { eq: Eq },
 }
 
 fn main() {
     let mut v0 = Var::<MyRx>::new_var_item(1);
     let mut v1 = Var::new_var_item(1);
-    let eq0 = Eq::new_eq_item(&v0, &v1);
+    let mut eq0 = Eq::new_eq_item(&v0, &v1);
     eq0.commit();
     MyRx::rx().to_dot(PathBuf::from_str("egraph0").unwrap());
 
@@ -27,7 +27,6 @@ fn main() {
     v0.set_num(4).stage();
     eq0.commit();
     MyRx::rx().to_dot(PathBuf::from_str("egraph2").unwrap());
-
 }
 
 basic_rx_vt!(MyRx);

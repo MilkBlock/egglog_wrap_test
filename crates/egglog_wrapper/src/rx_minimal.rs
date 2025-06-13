@@ -1,8 +1,5 @@
-use crate::{
-    collect_string_type_defs,
-    wrap::Rx,
-};
-use egglog::{ast::Command, EGraph, SerializeConfig};
+use crate::{collect_string_type_defs, wrap::Rx};
+use egglog::{EGraph, SerializeConfig, ast::Command};
 use std::{path::PathBuf, sync::Mutex};
 
 pub struct RxMinimal {
@@ -21,7 +18,7 @@ impl RxMinimal {
             }),
         }
     }
-    pub fn new_with_type_defs(commands:Vec<Command>) -> Self {
+    pub fn new_with_type_defs(commands: Vec<Command>) -> Self {
         Self {
             egraph: Mutex::new({
                 let mut e = EGraph::default();
@@ -56,10 +53,7 @@ impl Rx for RxMinimal {
         self.interpret(received);
     }
 
-    fn on_new(&self, _node: &(impl crate::wrap::EgglogNode + 'static)) {
-    }
-    
-    fn on_set(&self, _node: &mut (impl crate::wrap::EgglogNode + 'static)) {
-    }
-}
+    fn on_new(&self, _node: &(impl crate::wrap::EgglogNode + 'static)) {}
 
+    fn on_set(&self, _node: &mut (impl crate::wrap::EgglogNode + 'static)) {}
+}
