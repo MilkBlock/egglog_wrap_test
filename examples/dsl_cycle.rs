@@ -14,6 +14,9 @@ enum B {
     Empty {},
 }
 
+/// NB: this should panic because Cycle is not allowed.
+/// 
+/// Only DAG is supported.
 fn main() {
     let mut a = A::new_a_con(&B::<MyRx>::new_empty());
     let b = B::<MyRx>::new_empty();
