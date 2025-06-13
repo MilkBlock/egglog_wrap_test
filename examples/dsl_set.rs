@@ -1,5 +1,5 @@
 use egglog_macros::egglog_ty;
-use egglog_wrapper::basic_rx_vt;
+use egglog_wrapper::basic_rx_no_vt;
 
 #[egglog_ty]
 enum Cons {
@@ -18,22 +18,12 @@ enum Root {
 }
 
 fn main() {
-    let node0 = Cons::new_value(0, &Cons::<MyRx>::new_end());
-    let mut node1 = Cons::new_value(1, &node0);
-    let node2 = Cons::new_value(2, &node1);
-    let root = Root::new_v(&VecCon::new(vec![&node2]));
-    root.stage();
-    root.commit();
-    println!("node2's current version is {}", node2.cur_sym());
-    node1.set_v(4).set_con(&node2);
-    println!("node2's current version is {}", node2.cur_sym());
-    let root = Root::new_v(&VecCon::new(vec![&node2]));
-    root.stage();
-    root.commit();
-    println!("node2's current version is {}", node2.cur_sym());
-    MyRx::rx().interpret("(function F () Root :no-merge)".to_owned());
-    MyRx::rx().interpret("(set (F) root2)".to_owned());
+    let node1 = Cons::new_value(3, &Cons::<MyRx>::new_end());
+    let mut node2 = Cons::new_value(2, &node1);
+    let node3 = Cons::new_value(1, &node2);
+    let root = Root::new_v(&VecCon::new(vec![&node1, &node2, &node3]));
+    node2.set_v(5);
     MyRx::rx().to_dot("egraph.dot".into());
 }
 
-basic_rx_vt!(MyRx);
+basic_rx_no_vt!(MyRx);

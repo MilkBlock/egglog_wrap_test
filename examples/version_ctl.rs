@@ -36,7 +36,6 @@ fn main() {
     MyRx::rx().to_dot("egraph.dot".into());
     root.locate_latest();
     Selected::<MyRx>::set((), &root);
-    // MyRx::rx().interpret(format!("(set (Latest) {})", root.cur_sym()).to_owned());
     MyRx::rx().to_dot("egraph1.dot".into());
 }
 
