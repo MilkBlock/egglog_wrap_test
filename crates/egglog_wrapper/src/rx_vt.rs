@@ -39,7 +39,7 @@ pub enum TopoDirection {
 /// Rx with version ctl feature
 impl RxVT {
     pub fn interpret(&self, s: String) {
-        println!("{}", s);
+        log::info!("{}", s);
         let mut egraph = self.egraph.lock().unwrap();
         egraph.parse_and_run_program(None, s.as_str()).unwrap();
     }
@@ -124,7 +124,7 @@ impl RxVT {
         }
         while !wait_for_release.is_empty() {
             let popped = wait_for_release.pop().unwrap();
-            println!(
+            log::info!(
                 "popped is {} preds:{:?}",
                 popped,
                 &self.map.get(&popped).unwrap().preds
@@ -133,14 +133,14 @@ impl RxVT {
                 if let Some(idx) = index_set.get_index_of(target) {
                     outs[idx] -= 1;
                     if outs[idx] == 0 {
-                        println!("{} found to be 0", target);
+                        log::info!("{} found to be 0", target);
                         wait_for_release.push(*target);
                     }
                 }
             }
             rst.push(popped);
         }
-        println!("{:?}", rst);
+        log::info!("{:?}", rst);
         rst
     }
     /// calculate the edges in the subgraph
@@ -157,7 +157,7 @@ impl RxVT {
         Self {
             egraph: Mutex::new({
                 let mut e = EGraph::default();
-                println!("{}", type_defs);
+                log::info!("{}", type_defs);
                 e.parse_and_run_program(None, type_defs.as_ref()).unwrap();
                 e
             }),
@@ -170,7 +170,7 @@ impl RxVT {
     fn add_node(&self, mut node: WorkAreaNode, auto_latest: bool) {
         let sym = node.cur_sym();
         for node in node.succs_mut() {
-            println!("succ is {}", node);
+            log::info!("succ is {}", node);
             let latest = if auto_latest {
                 &self.locate_latest(*node)
             } else {
@@ -197,7 +197,7 @@ impl RxVT {
         // collect all ancestors that need copy
         let mut ancestors = IndexSet::default();
         for (latest_sym, _) in &staged_latest_syms_and_staged_nodes {
-            println!("collect ancestors of {:?}", latest_sym);
+            log::info!("collect ancestors of {:?}", latest_sym);
             // self.collect_latest_ancestors(*latest_sym, &mut latest_ancestors);
             self.collect_ancestors(*latest_sym, &mut ancestors);
         }
@@ -226,7 +226,7 @@ impl RxVT {
         }
 
         // NB: ancestors set now contains all nodes that need to create
-        println!("all latest_ancestors {:?}", ancestors);
+        log::info!("all latest_ancestors {:?}", ancestors);
 
         let mut next_syms = IndexSet::default();
         for ancestor in ancestors {
@@ -271,7 +271,7 @@ impl RxVT {
                 }
             }
         }
-        println!("preds 「map」to be {:?}", succ_preds_map);
+        log::info!("preds 「map」to be {:?}", succ_preds_map);
 
         for &next_sym in &next_syms {
             let mut sym_node = self.map.get_mut(&next_sym).unwrap();
@@ -286,7 +286,7 @@ impl RxVT {
                 }
             }
         }
-        println!("{:#?}", self.map);
+        log::info!("{:#?}", self.map);
 
         next_syms
     }
@@ -374,7 +374,7 @@ impl RxCommit for RxVT {
                 .map(|a| *a.0)
                 .collect(),
         };
-        println!("{}", check_point);
+        log::info!("{}", check_point);
         self.checkpoints.lock().unwrap().push(check_point);
 
         // process new nodes
@@ -416,9 +416,9 @@ impl RxCommit for RxVT {
                 .map(|x| self.staged_set_map.remove(*x).unwrap().1),
         );
         let created = self.update_nodes(commit_root.cur_sym(), iter_impl.collect());
-        println!("created {:#?}", created);
+        log::info!("created {:#?}", created);
 
-        println!("nodes to topo:{:?}", created);
+        log::info!("nodes to topo:{:?}", created);
         self.topo_sort(&created, TopoDirection::Up)
             .into_iter()
             .for_each(|sym| self.receive(self.map.get(&sym).unwrap().egglog.to_egglog()));

@@ -12,7 +12,7 @@ impl RxMinimal {
         Self {
             egraph: Mutex::new({
                 let mut e = EGraph::default();
-                println!("{}", type_defs);
+                log::info!("{}", type_defs);
                 e.parse_and_run_program(None, type_defs.as_ref()).unwrap();
                 e
             }),
@@ -49,7 +49,7 @@ unsafe impl Sync for RxMinimal {}
 // MARK: Receiver
 impl Rx for RxMinimal {
     fn receive(&self, received: String) {
-        println!("{}", received);
+        log::info!("{}", received);
         self.interpret(received);
     }
 
