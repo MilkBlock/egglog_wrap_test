@@ -61,7 +61,7 @@ pub fn egglog_func(attr: TokenStream, item: TokenStream) -> TokenStream {
                 pub struct #name_node<T>{_p:std::marker::PhantomData<T>}
                 impl<R:RxSgl> egglog_wrapper::wrap::EgglogFunc for #name_node<R>{
                     type Output=#output<R,()>;
-                    type Input=(#(&'a dyn AsRef<#types<R,()>>,)*);
+                    type Input=(#(#types<R,()>,)*);
                     const FUNC_NAME:&'static str = stringify!(#name_node);
                 }
                 impl<'a, R:RxSgl> #name_node<R>{
