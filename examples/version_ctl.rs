@@ -1,5 +1,5 @@
 use egglog_macros::{egglog_func, egglog_ty};
-use egglog_wrapper::basic_rx_vt;
+use egglog_wrapper::basic_tx_vt;
 
 #[egglog_ty]
 enum Cons {
@@ -33,10 +33,10 @@ fn main() {
     node2.set_v(6).stage();
     root.commit();
     Selected::<MyRx>::set((), &root);
-    MyRx::rx().to_dot("egraph.dot".into());
+    MyRx::tx().to_dot("egraph.dot".into());
     root.locate_latest();
     Selected::<MyRx>::set((), &root);
-    MyRx::rx().to_dot("egraph1.dot".into());
+    MyRx::tx().to_dot("egraph1.dot".into());
 }
 
-basic_rx_vt!(MyRx);
+basic_tx_vt!(MyRx);

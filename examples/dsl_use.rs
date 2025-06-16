@@ -1,5 +1,5 @@
 use egglog_macros::{egglog_func, egglog_ty};
-use egglog_wrapper::basic_rx_vt;
+use egglog_wrapper::basic_tx_vt;
 use std::path::PathBuf;
 
 // Type aliases for Vec types
@@ -219,7 +219,7 @@ fn main() {
 
     CurrentTimeline::set((), &timeline);
     // 输出到dot文件
-    MyRx::rx().to_dot(PathBuf::from("timeline_egraph"));
+    MyRx::tx().to_dot(PathBuf::from("timeline_egraph"));
 }
 
-basic_rx_vt!(MyRx);
+basic_tx_vt!(MyRx);

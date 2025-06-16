@@ -5,10 +5,10 @@ use egglog::{
     EGraph, SerializeConfig,
     util::{IndexMap, IndexSet},
 };
-use std::{collections::HashMap, path::PathBuf, string, sync::Mutex};
+use std::{collections::HashMap, path::PathBuf, sync::Mutex};
 
 #[derive(Default)]
-pub struct RxVT {
+pub struct TxVT {
     egraph: Mutex<EGraph>,
     map: DashMap<Sym, WorkAreaNode>,
     /// used to store staged node of committed nodes (Not only the currently latest node but also nodes of old versions)
@@ -33,8 +33,8 @@ pub enum TopoDirection {
     Up,
     Down,
 }
-/// Rx with version ctl feature
-impl RxVT {
+/// Tx with version ctl feature
+impl TxVT {
     pub fn interpret(&self, s: String) {
         log::info!("{}", s);
         let mut egraph = self.egraph.lock().unwrap();
@@ -104,8 +104,8 @@ impl RxVT {
         for (i, (in_degree, out_degree)) in ins.iter_mut().zip(outs.iter_mut()).enumerate() {
             let sym = index_set[i];
             let node = self.map.get(&sym).unwrap();
-            *in_degree = RxVT::degree_in_subgraph(node.preds().into_iter().map(|x| *x), index_set);
-            *out_degree = RxVT::degree_in_subgraph(node.succs().into_iter(), index_set);
+            *in_degree = TxVT::degree_in_subgraph(node.preds().into_iter().map(|x| *x), index_set);
+            *out_degree = TxVT::degree_in_subgraph(node.succs().into_iter(), index_set);
         }
         let (mut _ins, mut outs) = match direction {
             TopoDirection::Up => (ins, outs),
@@ -289,9 +289,9 @@ impl RxVT {
     }
 }
 
-unsafe impl Send for RxVT {}
-unsafe impl Sync for RxVT {}
-impl VersionCtl for RxVT {
+unsafe impl Send for TxVT {}
+unsafe impl Sync for TxVT {}
+impl VersionCtl for TxVT {
     /// locate the lastest version of the symbol
     fn locate_latest(&self, old: Sym) -> Sym {
         let map = &self.map;
@@ -337,13 +337,13 @@ impl VersionCtl for RxVT {
 }
 
 // MARK: Receiver
-impl Rx for RxVT {
-    fn receive(&self, received: RxCommand) {
+impl Tx for TxVT {
+    fn send(&self, received: TxCommand) {
         match received {
-            RxCommand::StringCommand { string_command } => {
+            TxCommand::StringCommand { string_command } => {
                 self.interpret(string_command);
             }
-            RxCommand::NativeCommand { native_command } => todo!(),
+            TxCommand::NativeCommand { native_command } => todo!(),
         }
     }
 
@@ -364,9 +364,9 @@ impl Rx for RxVT {
         output: <F::Output as crate::wrap::EgglogFuncOutput>::Ref<'a>,
     ) {
         let input_nodes = input.as_nodes();
-        let mut input_syms = input_nodes.iter().map(|x| x.cur_sym());
+        let input_syms = input_nodes.iter().map(|x| x.cur_sym());
         let output = output.as_node().cur_sym();
-        self.receive(RxCommand::StringCommand {
+        self.send(TxCommand::StringCommand {
             string_command: format!(
                 "(set ({} {}) {} )",
                 F::FUNC_NAME,
@@ -375,13 +375,41 @@ impl Rx for RxVT {
             ),
         });
     }
+
+    // fn on_func_get<'a,'b, F: EgglogFunc>(
+    //     &self,
+    //     input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    // ) -> <F::Output as EgglogFuncOutput>::Ref<'b> {
+    //     todo!();
+    // }
+
+    // fn on_funcs_get<'a,'b, F: EgglogFunc>(
+    //     &self, max_size:Option<usize>) ->
+    // Vec<(<<F as EgglogFunc>::Input as EgglogFuncInputs>::Ref<'b>, <<F as EgglogFunc>::Output as EgglogFuncOutput>::Ref<'b>)> {
+    //     // let mut egraph = self.egraph.lock().unwrap();
+    //     // // let dag = egraph.function_to_dag(EgglogFunc::FUNC_NAME.into(), max_size.unwrap_or(usize::MAX));
+    //     // let sym :GlobalSymbol=EgglogFunc::FUNC_NAME.into();
+    //     // let f = egraph.functions.get(&sym);
+    //     // match f{
+    //     //     Some(f) => {
+    //     //         let nodes = f
+    //     //             .nodes
+    //     //             .iter(true)
+    //     //             .take(n)
+    //     //             .map(|(k, v)| (ValueVec::from(k), v.clone()))
+    //     //             .collect::<Vec<_>>();
+    //     //             };
+    //     //     None => todo!(),
+    //     // };
+    //     todo!()
+    // }
 }
 
-impl RxCommit for RxVT {
+impl TxCommit for TxVT {
     /// commit behavior:
     /// 1. commit all descendants (if you also call set fn on subnodes they will also be committed)
     /// 2. commit basing the latest version of the working graph (working graph record all versions)
-    /// 3. if RxCommit is implemented you can only change egraph by commit things. It's lazy.
+    /// 3. if TxCommit is implemented you can only change egraph by commit things. It's lazy.
     fn on_commit<T: EgglogNode>(&self, commit_root: &T) {
         let check_point = CommitCheckPoint {
             committed_node_root: commit_root.cur_sym(),
@@ -407,7 +435,7 @@ impl RxCommit for RxVT {
         }
         // send egglog string to egraph
         backup_staged_new_syms.into_iter().for_each(|sym| {
-            self.receive(RxCommand::StringCommand {
+            self.send(TxCommand::StringCommand {
                 string_command: self.map.get(&sym).unwrap().egglog.to_egglog(),
             })
         });
@@ -444,7 +472,7 @@ impl RxCommit for RxVT {
         self.topo_sort(&created, TopoDirection::Up)
             .into_iter()
             .for_each(|sym| {
-                self.receive(RxCommand::StringCommand {
+                self.send(TxCommand::StringCommand {
                     string_command: self.map.get(&sym).unwrap().egglog.to_egglog(),
                 })
             });

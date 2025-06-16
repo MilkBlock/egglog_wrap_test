@@ -6,14 +6,14 @@ use std::{borrow::Borrow, fmt, hash::Hash, marker::PhantomData, sync::atomic::At
 use symbol_table::GlobalSymbol;
 
 #[derive(Debug)]
-pub enum RxCommand {
+pub enum TxCommand {
     StringCommand { string_command: String },
     NativeCommand { native_command: NCommand },
 }
 
-pub trait Rx: 'static {
+pub trait Tx: 'static {
     /// receive is guaranteed to not be called in proc macro
-    fn receive(&self, received: RxCommand);
+    fn send(&self, sended: TxCommand);
     fn on_new(&self, node: &(impl EgglogNode + 'static));
     fn on_set(&self, node: &mut (impl EgglogNode + 'static));
     fn on_func_set<'a, F: EgglogFunc>(
@@ -22,44 +22,72 @@ pub trait Rx: 'static {
         output: <F::Output as crate::wrap::EgglogFuncOutput>::Ref<'a>,
     );
 }
+pub trait Rx: 'static {
+    fn on_func_get<'a, 'b, F: EgglogFunc>(
+        &self,
+        input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    ) -> <F::Output as EgglogFuncOutput>::Ref<'b>;
+    fn on_funcs_get<'a, 'b, F: EgglogFunc>(
+        &self,
+        max_size: Option<usize>,
+    ) -> Vec<(
+        <F::Input as EgglogFuncInputs>::Ref<'b>,
+        <F::Output as EgglogFuncOutput>::Ref<'b>,
+    )>;
+}
 
 pub trait SingletonGetter {
     type RetTy;
-    fn rx() -> &'static Self::RetTy;
+    fn tx() -> &'static Self::RetTy;
 }
 
-pub trait RxSgl: 'static + Sized {
-    // delegate all functions from LetStmtRxInner
-    fn receive(received: RxCommand);
+pub trait TxSgl: 'static + Sized {
+    // delegate all functions from Tx
+    fn receive(received: TxCommand);
     fn on_new(node: &(impl EgglogNode + 'static));
     fn on_set(node: &mut (impl EgglogNode + 'static));
     fn on_func_set<'a, F: EgglogFunc>(
         input: <F::Input as EgglogFuncInputs>::Ref<'a>,
         output: <F::Output as EgglogFuncOutput>::Ref<'a>,
     );
+    // fn on_func_get<'a,'b, F: EgglogFunc>(
+    //     &self,
+    //     input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    // ) -> <F::Output as EgglogFuncOutput>::Ref<'b>;
+    // fn on_funcs_get<'a,'b, F: EgglogFunc>(max_size:Option<usize>) -> Vec<(<F::Input as EgglogFuncInputs>::Ref<'b>, <F::Output as EgglogFuncOutput>::Ref<'b>)>;
 }
 
-impl<R: Rx + 'static, T: SingletonGetter<RetTy = R> + 'static> RxSgl for T {
-    fn receive(received: RxCommand) {
-        Self::rx().receive(received);
+impl<R: Tx + 'static, T: SingletonGetter<RetTy = R> + 'static> TxSgl for T {
+    fn receive(received: TxCommand) {
+        Self::tx().send(received);
     }
     fn on_new(node: &(impl EgglogNode + 'static)) {
-        Self::rx().on_new(node);
+        Self::tx().on_new(node);
     }
     fn on_set(node: &mut (impl EgglogNode + 'static)) {
-        Self::rx().on_set(node);
+        Self::tx().on_set(node);
     }
 
     fn on_func_set<'a, F: EgglogFunc>(
         input: <F::Input as EgglogFuncInputs>::Ref<'a>,
         output: <F::Output as EgglogFuncOutput>::Ref<'a>,
     ) {
-        Self::rx().on_func_set::<F>(input, output);
+        Self::tx().on_func_set::<F>(input, output);
     }
+    // fn on_func_get<'a,'b, F: EgglogFunc>(
+    //     &self,
+    //     input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    // ) -> <F::Output as EgglogFuncOutput>::Ref<'b> {
+    //     Self::tx().on_func_get::<F>(input)
+    // }
+
+    // fn on_funcs_get<'a,'b, F: EgglogFunc>(max_size:Option<usize>) -> Vec<(<F::Input as EgglogFuncInputs>::Ref<'b>, <F::Output as EgglogFuncOutput>::Ref<'b>)> {
+    //     Self::tx().on_funcs_get::<F>(max_size)
+    // }
 }
 
 /// version control triat
-/// which should be implemented by Rx
+/// which should be implemented by Tx
 pub trait VersionCtl {
     fn locate_latest(&self, node: Sym) -> Sym;
     fn locate_next(&self, node: Sym) -> Sym;
@@ -70,7 +98,7 @@ pub trait VersionCtl {
 }
 
 /// version control triat
-/// which should be implemented by Rx
+/// which should be implemented by Tx
 pub trait VersionCtlSgl {
     fn locate_latest(node: Sym) -> Sym;
     fn locate_next(node: Sym) -> Sym;
@@ -80,24 +108,24 @@ pub trait VersionCtlSgl {
     fn set_prev(node: &mut Sym);
 }
 
-impl<Ret: Rx + VersionCtl + 'static, S: SingletonGetter<RetTy = Ret>> VersionCtlSgl for S {
+impl<Ret: Tx + VersionCtl + 'static, S: SingletonGetter<RetTy = Ret>> VersionCtlSgl for S {
     fn locate_latest(node: Sym) -> Sym {
-        Self::rx().locate_latest(node)
+        Self::tx().locate_latest(node)
     }
     fn locate_next(node: Sym) -> Sym {
-        Self::rx().locate_next(node)
+        Self::tx().locate_next(node)
     }
     fn locate_prev(node: Sym) -> Sym {
-        Self::rx().locate_prev(node)
+        Self::tx().locate_prev(node)
     }
     fn set_latest(node: &mut Sym) {
-        Self::rx().set_latest(node)
+        Self::tx().set_latest(node)
     }
     fn set_next(node: &mut Sym) {
-        Self::rx().set_next(node)
+        Self::tx().set_next(node)
     }
     fn set_prev(node: &mut Sym) {
-        Self::rx().set_prev(node)
+        Self::tx().set_prev(node)
     }
 }
 
@@ -166,7 +194,7 @@ pub trait EgglogEnumVariantTy: Clone + 'static {
 pub struct Node<T, R, I, S>
 where
     T: EgglogTy,
-    R: RxSgl,
+    R: TxSgl,
     I: NodeInner<T>,
     S: EgglogEnumVariantTy,
 {
@@ -180,7 +208,7 @@ where
 impl<T, R, I, S> AsRef<Node<T, R, I, ()>> for Node<T, R, I, S>
 where
     T: EgglogTy,
-    R: RxSgl,
+    R: TxSgl,
     I: NodeInner<T>,
     S: EgglogEnumVariantTy,
 {
@@ -236,7 +264,7 @@ impl<T: EgglogTy> From<Syms<T>> for Syms {
         value.into_iter().map(|s| s.erase()).collect()
     }
 }
-/// count the number of nodes of specific EgglogTy for specific binding Rx
+/// count the number of nodes of specific EgglogTy for specific binding Tx
 pub struct TyCounter<T: EgglogTy> {
     counter: AtomicU32,
     t: PhantomData<T>,
@@ -353,33 +381,33 @@ impl Syms {
 }
 
 /// global commit
-/// This trait should be implemented for Rx singleton
+/// This trait should be implemented for Tx singleton
 /// usage:
 /// ```rust
 /// let last_version_node = node.clone();
-/// Rx::commit(&self, node);
+/// Tx::commit(&self, node);
 /// ```
-pub trait RxCommit {
+pub trait TxCommit {
     fn on_commit<T: EgglogNode>(&self, node: &T);
     fn on_stage<T: EgglogNode + ?Sized>(&self, node: &T);
 }
 
-pub trait RxCommitSgl {
+pub trait TxCommitSgl {
     fn on_commit<T: EgglogNode>(node: &T);
     fn on_stage<T: EgglogNode>(node: &T);
 }
 
-impl<Ret, S> RxCommitSgl for S
+impl<Ret, S> TxCommitSgl for S
 where
-    Ret: Rx + VersionCtl + RxCommit,
+    Ret: Tx + VersionCtl + TxCommit,
     S: SingletonGetter<RetTy = Ret>,
 {
     fn on_commit<T: EgglogNode>(node: &T) {
-        S::rx().on_commit(node);
+        S::tx().on_commit(node);
     }
 
     fn on_stage<T: EgglogNode>(node: &T) {
-        S::rx().on_stage(node);
+        S::tx().on_stage(node);
     }
 }
 

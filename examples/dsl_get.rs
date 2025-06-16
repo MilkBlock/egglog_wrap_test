@@ -5,7 +5,7 @@ use std::{
 };
 
 use egglog_macros::{egglog_func, egglog_ty};
-use egglog_wrapper::{basic_rx_no_vt, collect_string_type_defs, rx::RxNoVT};
+use egglog_wrapper::{basic_tx_no_vt, collect_string_type_defs, tx::TxNoVT};
 // use egglog_wrapper::wrap::Sort;
 
 #[egglog_ty]
@@ -39,7 +39,7 @@ fn main() {
     node2.set_v(6);
     println!("node2's current version is {}", node2.cur_sym());
     F::set((), &root);
-    MyRx::rx().to_dot("egraph.dot".into());
+    MyRx::tx().to_dot("egraph.dot".into());
 }
 
-basic_rx_no_vt!(MyRx);
+basic_tx_no_vt!(MyRx);

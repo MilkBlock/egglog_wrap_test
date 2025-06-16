@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use egglog_macros::egglog_ty;
-use egglog_wrapper::basic_rx_no_vt;
+use egglog_wrapper::basic_tx_no_vt;
 
 #[egglog_ty]
 enum A {
@@ -21,7 +21,7 @@ fn main() {
     let mut a = A::new_a_con(&B::<MyRx>::new_empty());
     let b = B::<MyRx>::new_empty();
     a.set_b(&B::new_b_con(&a));
-    MyRx::rx().to_dot(PathBuf::from("egraph"));
+    MyRx::tx().to_dot(PathBuf::from("egraph"));
 }
 
-basic_rx_no_vt!(MyRx);
+basic_tx_no_vt!(MyRx);

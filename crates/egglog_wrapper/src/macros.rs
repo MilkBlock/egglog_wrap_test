@@ -1,62 +1,62 @@
 #[macro_export]
-macro_rules! basic_rx_no_vt {
+macro_rules! basic_tx_no_vt {
     ($name:ident) => {
         struct $name {
-            rx: egglog_wrapper::rx::RxNoVT,
+            tx: egglog_wrapper::tx::TxNoVT,
         }
         impl SingletonGetter for $name {
-            type RetTy = egglog_wrapper::rx::RxNoVT;
-            fn rx() -> &'static egglog_wrapper::rx::RxNoVT {
+            type RetTy = egglog_wrapper::tx::TxNoVT;
+            fn tx() -> &'static egglog_wrapper::tx::TxNoVT {
                 static INSTANCE: std::sync::OnceLock<$name> = std::sync::OnceLock::new();
                 &INSTANCE
                     .get_or_init(|| -> $name {
                         Self {
-                            rx: egglog_wrapper::rx::RxNoVT::new(),
+                            tx: egglog_wrapper::tx::TxNoVT::new(),
                         }
                     })
-                    .rx
+                    .tx
             }
         }
     };
 }
 #[macro_export]
-macro_rules! basic_rx_vt {
+macro_rules! basic_tx_vt {
     ($name:ident) => {
         struct $name {
-            rx: egglog_wrapper::rx_vt::RxVT,
+            tx: egglog_wrapper::tx_vt::TxVT,
         }
         impl SingletonGetter for $name {
-            type RetTy = egglog_wrapper::rx_vt::RxVT;
-            fn rx() -> &'static egglog_wrapper::rx_vt::RxVT {
+            type RetTy = egglog_wrapper::tx_vt::TxVT;
+            fn tx() -> &'static egglog_wrapper::tx_vt::TxVT {
                 static INSTANCE: std::sync::OnceLock<$name> = std::sync::OnceLock::new();
                 &INSTANCE
                     .get_or_init(|| -> $name {
                         Self {
-                            rx: egglog_wrapper::rx_vt::RxVT::new(),
+                            tx: egglog_wrapper::tx_vt::TxVT::new(),
                         }
                     })
-                    .rx
+                    .tx
             }
         }
     };
 }
 #[macro_export]
-macro_rules! basic_rx_minimal {
+macro_rules! basic_tx_minimal {
     ($name:ident) => {
         struct $name {
-            rx: egglog_wrapper::rx_minimal::RxMinimal,
+            tx: egglog_wrapper::tx_minimal::TxMinimal,
         }
         impl SingletonGetter for $name {
-            type RetTy = egglog_wrapper::rx_minimal::RxMinimal;
-            fn rx() -> &'static egglog_wrapper::rx_minimal::RxMinimal {
+            type RetTy = egglog_wrapper::tx_minimal::TxMinimal;
+            fn tx() -> &'static egglog_wrapper::tx_minimal::TxMinimal {
                 static INSTANCE: std::sync::OnceLock<$name> = std::sync::OnceLock::new();
                 &INSTANCE
                     .get_or_init(|| -> $name {
                         Self {
-                            rx: egglog_wrapper::rx_minimal::RxMinimal::new(),
+                            tx: egglog_wrapper::tx_minimal::TxMinimal::new(),
                         }
                     })
-                    .rx
+                    .tx
             }
         }
     };

@@ -3,14 +3,14 @@ use dashmap::DashMap;
 use egglog::{EGraph, SerializeConfig, util::IndexSet};
 use std::{path::PathBuf, sync::Mutex};
 
-pub struct RxNoVT {
+pub struct TxNoVT {
     egraph: Mutex<EGraph>,
     map: DashMap<Sym, WorkAreaNode>,
     latest_map: DashMap<Sym, Sym>,
 }
 
-/// Rx without version ctl feature
-impl RxNoVT {
+/// Tx without version ctl feature
+impl TxNoVT {
     pub fn new_with_type_defs(type_defs: String) -> Self {
         Self {
             egraph: Mutex::new({
@@ -64,8 +64,8 @@ impl RxNoVT {
             let sym = index_set[i];
             let node = map.get(&sym).unwrap();
             *in_degree =
-                RxNoVT::degree_in_subgraph(node.preds().into_iter().map(|x| *x), index_set);
-            *out_degree = RxNoVT::degree_in_subgraph(node.succs().into_iter(), index_set);
+                TxNoVT::degree_in_subgraph(node.preds().into_iter().map(|x| *x), index_set);
+            *out_degree = TxNoVT::degree_in_subgraph(node.succs().into_iter(), index_set);
         }
         let mut rst = Vec::new();
         let mut wait_for_release = Vec::new();
@@ -106,7 +106,7 @@ impl RxNoVT {
         cur
     }
     fn add_node(&self, node: &(impl EgglogNode + 'static)) {
-        self.receive(RxCommand::StringCommand {
+        self.send(TxCommand::StringCommand {
             string_command: node.to_egglog(),
         });
         let mut node = WorkAreaNode::new(node.clone_dyn());
@@ -175,7 +175,7 @@ impl RxNoVT {
         for new_sym in topo {
             s += self.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
         }
-        self.receive(RxCommand::StringCommand { string_command: s });
+        self.send(TxCommand::StringCommand { string_command: s });
     }
 
     // fn update_symnodes(&self, _start_iter: impl Iterator<Item = (Sym, SymbolNode)>) {
@@ -183,17 +183,21 @@ impl RxNoVT {
     // }
 }
 
-unsafe impl Send for RxNoVT {}
-unsafe impl Sync for RxNoVT {}
+unsafe impl Send for TxNoVT {}
+unsafe impl Sync for TxNoVT {}
 // MARK: Receiver
-impl Rx for RxNoVT {
-    fn receive(&self, received: RxCommand) {
+impl Tx for TxNoVT {
+    fn send(&self, received: TxCommand) {
         log::info!("{:?}", received);
         match received {
-            RxCommand::StringCommand { string_command } => {
+            TxCommand::StringCommand { string_command } => {
                 self.interpret(string_command);
             }
-            RxCommand::NativeCommand { native_command } => todo!(),
+            TxCommand::NativeCommand { native_command } => {
+                let mut egraph = self.egraph.lock().unwrap();
+                // egraph.run_program(program);
+                todo!();
+            }
         }
     }
 
@@ -211,9 +215,9 @@ impl Rx for RxNoVT {
         output: <F::Output as crate::wrap::EgglogFuncOutput>::Ref<'a>,
     ) {
         let input_nodes = input.as_nodes();
-        let mut input_syms = input_nodes.iter().map(|x| x.cur_sym());
+        let input_syms = input_nodes.iter().map(|x| x.cur_sym());
         let output = output.as_node().cur_sym();
-        self.receive(RxCommand::StringCommand {
+        self.send(TxCommand::StringCommand {
             string_command: format!(
                 "(set ({} {}) {} )",
                 F::FUNC_NAME,
@@ -222,4 +226,18 @@ impl Rx for RxNoVT {
             ),
         });
     }
+
+    // fn on_func_get<'a,'b, F: EgglogFunc>(
+    //     &self,
+    //     input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    // ) -> <F::Output as EgglogFuncOutput>::Ref<'b> {
+    //     todo!()
+    // }
+
+    // fn on_funcs_get<'a,'b, F: EgglogFunc>(
+    //     &self,
+    //     max_size:Option<usize>)->
+    // Vec<(<F::Input as EgglogFuncInputs>::Ref<'b>,<F::Output as EgglogFuncOutput>::Ref<'b>)> {
+    //     todo!()
+    // }
 }

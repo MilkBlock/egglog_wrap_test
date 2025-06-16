@@ -59,14 +59,14 @@ pub fn egglog_func(attr: TokenStream, item: TokenStream) -> TokenStream {
             let merge_option: proc_macro2::TokenStream = "merge new".to_token_stream();
             quote! {
                 pub struct #name_node<T>{_p:std::marker::PhantomData<T>}
-                impl<R:RxSgl> egglog_wrapper::wrap::EgglogFunc for #name_node<R>{
-                    type Output=#output<R,()>;
-                    type Input=(#(#types<R,()>,)*);
+                impl<T:TxSgl> egglog_wrapper::wrap::EgglogFunc for #name_node<T>{
+                    type Output=#output<T,()>;
+                    type Input=(#(#types<T,()>,)*);
                     const FUNC_NAME:&'static str = stringify!(#name_node);
                 }
-                impl<'a, R:RxSgl> #name_node<R>{
-                    pub fn set(input: (#(&'a dyn AsRef<#types<R,()>>,)*), output: &dyn AsRef<#output<R,()>>){
-                        R::on_func_set::<#name_node<R>>(input, output.as_ref());
+                impl<'a, T:TxSgl> #name_node<T>{
+                    pub fn set(input: (#(&'a dyn AsRef<#types<T,()>>,)*), output: &dyn AsRef<#output<T,()>>){
+                        T::on_func_set::<#name_node<T>>(input, output.as_ref());
                     }
                 }
                 #inventory_path::submit!{
@@ -237,13 +237,13 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         };
                         let _first_generic = format_ident!("{}", first_generic_ident);
                         // postfix_type(&first_generic,"Node",Some("T")
-                        (quote!(dyn AsRef<#_first_generic<R, ()>>), false)
+                        (quote!(dyn AsRef<#_first_generic<T, ()>>), false)
                     }
                 };
             let to_egglog_impl = if is_basic_ty {
                 quote! {
-                    impl<R:RxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>
-                    where #name_node<R,V>: EgglogNode{
+                    impl<T:TxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<T,V>
+                    where #name_node<T,V>: EgglogNode{
                         fn to_egglog(&self) -> String{
                             format!("(let {} (vec-of {}))",self.node.sym,self.node.ty.v.iter_mut().fold("".to_owned(), |s,item| s+ item.as_str()+" " ))
                         }
@@ -251,26 +251,26 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             } else {
                 quote! {
-                    impl<R:RxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>
-                    where #name_node<R,V>: EgglogNode{
+                    impl<T:TxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<T,V>
+                    where #name_node<T,V>: EgglogNode{
                         fn to_egglog(&self) -> String{
                             format!("(let {} (vec-of {}))",self.cur_sym(),self.node.ty.v.iter().fold("".to_owned(), |s,item| s+ item.as_str()+" " ))
                         }
                     }
-                    impl<R:RxSgl + VersionCtlSgl, V:EgglogEnumVariantTy> LocateVersion for #name_node<R,V>
-                    where #name_node<R,V> : EgglogNode
+                    impl<T:TxSgl + VersionCtlSgl, V:EgglogEnumVariantTy> LocateVersion for #name_node<T,V>
+                    where #name_node<T,V> : EgglogNode
                     {
                         fn locate_latest(&mut self){
-                            R::set_latest(self.cur_sym_mut());
-                            self.node.ty.v.iter_mut().for_each(|item| {R::set_latest(item.erase_mut())});
+                            T::set_latest(self.cur_sym_mut());
+                            self.node.ty.v.iter_mut().for_each(|item| {T::set_latest(item.erase_mut())});
                         }
                         fn locate_next(&mut self){
-                            R::set_next(self.cur_sym_mut());
-                            self.node.ty.v.iter_mut().for_each(|item| {R::set_next(item.erase_mut())});
+                            T::set_next(self.cur_sym_mut());
+                            self.node.ty.v.iter_mut().for_each(|item| {T::set_next(item.erase_mut())});
                         }
                         fn locate_prev(&mut self){
-                            R::set_prev(self.cur_sym_mut());
-                            self.node.ty.v.iter_mut().for_each(|item| {R::set_next(item.erase_mut())});
+                            T::set_prev(self.cur_sym_mut());
+                            self.node.ty.v.iter_mut().for_each(|item| {T::set_next(item.erase_mut())});
                         }
                     }
                 }
@@ -301,12 +301,12 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
             };
             if is_vec_type(&f.ty) {
                 let vec_expanded = quote! {
-                    pub type #name_node_alias<R,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,V>;
+                    pub type #name_node_alias<T,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,T,#name_inner,V>;
                     #[derive(Clone,Debug)]
                     pub struct #name_egglogty_impl;
                     #[derive(::derive_more::DerefMut,::derive_more::Deref)]
-                    pub struct #name_node<R: RxSgl, V: EgglogEnumVariantTy=()> {
-                        node:#name_node_alias<R,V>
+                    pub struct #name_node<T: TxSgl, V: EgglogEnumVariantTy=()> {
+                        node:#name_node_alias<T,V>
                     }
                     #[derive(Clone,Debug)]
                     pub struct #name_inner {
@@ -317,16 +317,16 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         impl NodeInner<#name_egglogty_impl> for #name_inner{}
                         use std::marker::PhantomData;
                         static #name_counter: TyCounter<#name_egglogty_impl> = TyCounter::new();
-                        impl<R:RxSgl> #name_node<R,()> {
-                            pub fn new(#field_name:Vec<&#field_node_ty>) -> #name_node<R,()>{
+                        impl<T:TxSgl> #name_node<T,()> {
+                            pub fn new(#field_name:Vec<&#field_node_ty>) -> #name_node<T,()>{
                                 let #field_name = #field_name.into_iter().map(|r| r.as_ref().sym).collect();
                                 let node = Node{ ty: #name_inner{v:#field_name}, sym: #name_counter.next_sym(),_p: PhantomData, _s: PhantomData};
                                 let node = #name_node {node};
-                                R::on_new(&node);
+                                T::on_new(&node);
                                 node
                             }
                         }
-                        impl<R:RxSgl> EgglogNode for #name_node<R,()> {
+                        impl<T:TxSgl> EgglogNode for #name_node<T,()> {
                             fn succs_mut(&mut self) -> Vec<&mut Sym>{
                                 self.node.ty.v.iter_mut().map(|s| s.erase_mut()).collect()
                             }
@@ -348,14 +348,14 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 Box::new(self.clone())
                             }
                         }
-                        impl<R: RxSgl, V: EgglogEnumVariantTy> AsRef<#name_node<R, ()>> for #name_node<R, V> {
-                            fn as_ref(&self) -> &#name_node<R, ()> {
+                        impl<T: TxSgl, V: EgglogEnumVariantTy> AsRef<#name_node<T, ()>> for #name_node<T, V> {
+                            fn as_ref(&self) -> &#name_node<T, ()> {
                                 unsafe {
-                                    &*(self as *const #name_node<R,V> as *const #name_node<R,()>)
+                                    &*(self as *const #name_node<T,V> as *const #name_node<T,()>)
                                 }
                             }
                         }
-                        impl<R:RxSgl,V:EgglogEnumVariantTy > Clone for #name_node<R,V> {
+                        impl<T:TxSgl,V:EgglogEnumVariantTy > Clone for #name_node<T,V> {
                             fn clone(&self) -> Self {
                                 Self { node: Node { ty: self.node.ty.clone(), sym: self.node.sym.clone(), _p: PhantomData, _s: PhantomData }  }
                             }
@@ -413,13 +413,13 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         quote! {}
                     },
                     |x| {
-                        quote! { R::set_latest(#x.erase_mut());}
+                        quote! { T::set_latest(#x.erase_mut());}
                     },
                 );
                 let variant_name = &variant.ident;
                 quote! {
                     #name_inner::#variant_name {#(#variant_idents),* } => {
-                        R::set_latest(self.node.sym.erase_mut());
+                        T::set_latest(self.node.sym.erase_mut());
                         #(#mapped_variant_idents)*
                     }
                 }
@@ -433,13 +433,13 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         quote! {}
                     },
                     |x| {
-                        quote! {R::set_next(#x.erase_mut());}
+                        quote! {T::set_next(#x.erase_mut());}
                     },
                 );
                 let variant_name = &variant.ident;
                 quote! {
                     #name_inner::#variant_name {#(#variant_idents),* } => {
-                        R::set_next(self.node.sym.erase_mut());
+                        T::set_next(self.node.sym.erase_mut());
                         #(#mapped_variant_idents)*
                     }
                 }
@@ -452,13 +452,13 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         quote! {}
                     },
                     |x| {
-                        quote! {R::set_prev(#x.erase_mut());}
+                        quote! {T::set_prev(#x.erase_mut());}
                     },
                 );
                 let variant_name = &variant.ident;
                 quote! {
                     #name_inner::#variant_name {#(#variant_idents),* } => {
-                        R::set_prev(self.node.sym.erase_mut());
+                        T::set_prev(self.node.sym.erase_mut());
                         #(#mapped_variant_idents)*
                     }
                 }
@@ -470,11 +470,11 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let new_fn_name = format_ident!("new_{}",variant_name.to_string().to_snake_case());
 
                 quote! {
-                    pub fn #new_fn_name(#(#ref_node_list),*) -> #name_node<R,#variant_name>{
+                    pub fn #new_fn_name(#(#ref_node_list),*) -> #name_node<T,#variant_name>{
                         let ty = #name_inner::#variant_name {#(#field_idents),*  };
                         let node = Node { ty, sym: #name_counter.next_sym(), _p:PhantomData, _s:PhantomData::<#variant_name>};
                         let node = #name_node {node};
-                        R::on_new(&node);
+                        T::on_new(&node);
                         node
                     }
                 }
@@ -509,7 +509,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 if let #name_inner::#variant_name{ #(#field_idents),*} = &mut self.node.ty{
                                     *#field_ident = ___sym
                                 };
-                                R::on_set(self);
+                                T::on_set(self);
                                 self
                             }
                         }
@@ -553,7 +553,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     .map(|x| format_ident!("{}",x.to_string())).collect();
 
                 quote! {
-                    impl<R:RxSgl> #name_node<R,#variant_name>{
+                    impl<T:TxSgl> #name_node<T,#variant_name>{
                         #(
                             #set_fns
                         )*
@@ -564,7 +564,7 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             #get_mut_sym_fns
                         )*
                     }
-                    impl<R:RxSgl> EgglogNode for #name_node<R,#variant_name>{
+                    impl<T:TxSgl> EgglogNode for #name_node<T,#variant_name>{
                         fn succs_mut(&mut self) -> Vec<&mut Sym>{
                             if let #name_inner::#variant_name{ #(#field_idents),*} = &mut self.node.ty{
                                 vec![#(#vec_needed_syms.erase_mut()),*]
@@ -599,10 +599,10 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
             });
 
             let expanded = quote! {
-                pub type #name_node_alias<R,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,R,#name_inner,V>;
+                pub type #name_node_alias<T,V> = #egglog_wrapper_path::wrap::Node<#name_egglogty_impl,T,#name_inner,V>;
                 #[derive(derive_more::Deref,)]
-                pub struct #name_node<R: RxSgl,V:EgglogEnumVariantTy=()> {
-                    node:#name_node_alias<R,V>
+                pub struct #name_node<T: TxSgl,V:EgglogEnumVariantTy=()> {
+                    node:#name_node_alias<T,V>
                 }
                 #[derive(Debug,Clone)]
                 pub struct #name_egglogty_impl;
@@ -615,10 +615,10 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     use std::marker::PhantomData;
                     use #egglog_wrapper_path::*;
                     #(#enum_variant_tys_def)*
-                    impl<R:RxSgl> #name_node<R,()> {
+                    impl<T:TxSgl> #name_node<T,()> {
                         #(#fns)*
                     }
-                    impl<R:RxSgl> EgglogNode for #name_node<R,()> {
+                    impl<T:TxSgl> EgglogNode for #name_node<T,()> {
                         fn succs_mut(&mut self) -> Vec<&mut Sym>{
                             vec![]
                         }
@@ -640,16 +640,16 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             Box::new(self.clone())
                         }
                     }
-                    impl<R:RxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<R,V>
-                    where #name_node<R,V>: EgglogNode{
+                    impl<T:TxSgl, V:EgglogEnumVariantTy> ToEgglog for #name_node<T,V>
+                    where #name_node<T,V>: EgglogNode{
                         fn to_egglog(&self) -> String{
                             match &self.node.ty{
                                 #(#to_egglog_match_arms),*
                             }
                         }
                     }
-                    impl<R:RxSgl + VersionCtlSgl, V:EgglogEnumVariantTy> LocateVersion for #name_node<R,V>
-                    where #name_node<R,V> : EgglogNode {
+                    impl<T:TxSgl + VersionCtlSgl, V:EgglogEnumVariantTy> LocateVersion for #name_node<T,V>
+                    where #name_node<T,V> : EgglogNode {
                         fn locate_latest(&mut self) {
                             match &mut self.node.ty{
                                 #(#locate_latest_match_arms),*
@@ -666,29 +666,29 @@ pub fn egglog_ty(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                         }
                     }
-                    impl<R: RxSgl,  V: EgglogEnumVariantTy> AsRef<#name_node<R, ()>> for #name_node<R, V> {
-                        fn as_ref(&self) -> &#name_node<R, ()> {
+                    impl<T: TxSgl,  V: EgglogEnumVariantTy> AsRef<#name_node<T, ()>> for #name_node<T, V> {
+                        fn as_ref(&self) -> &#name_node<T, ()> {
                             unsafe {
-                                &*(self as *const #name_node<R,V> as *const #name_node<R,()>)
+                                &*(self as *const #name_node<T,V> as *const #name_node<T,()>)
                             }
                         }
                     }
 
-                    impl<R:RxSgl,V:EgglogEnumVariantTy > Clone for #name_node<R,V> {
+                    impl<T:TxSgl,V:EgglogEnumVariantTy > Clone for #name_node<T,V> {
                         fn clone(&self) -> Self {
                             Self { node: Node { ty: self.ty.clone(), sym: self.sym.clone(), _p: PhantomData, _s: PhantomData }  }
                         }
                     }
 
-                    impl<R:RxSgl+ VersionCtlSgl + RxCommitSgl,S: EgglogEnumVariantTy> Commit for #name_node<R,S>
+                    impl<T:TxSgl+ VersionCtlSgl + TxCommitSgl,S: EgglogEnumVariantTy> Commit for #name_node<T,S>
                     where
-                        #name_node<R, S>: EgglogNode
+                        #name_node<T, S>: EgglogNode
                     {
                         fn commit(&self) {
-                            R::on_commit(self);
+                            T::on_commit(self);
                         }
                         fn stage(&self) {
-                            R::on_stage(self);
+                            T::on_stage(self);
                         }
                     }
 

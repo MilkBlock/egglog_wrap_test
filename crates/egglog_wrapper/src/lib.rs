@@ -1,12 +1,12 @@
 pub use derive_more;
 pub mod macros;
-pub mod rx;
-pub mod rx_vt;
+pub mod tx;
+pub mod tx_vt;
 pub mod wrap;
 pub use smallvec;
 
 use crate::wrap::{FuncSort, TySort};
-pub mod rx_minimal;
+pub mod tx_minimal;
 
 pub fn collect_string_type_defs() -> String {
     let mut ty_defs = "".to_owned();

@@ -1,5 +1,5 @@
 use egglog_macros::{egglog_func, egglog_ty};
-use egglog_wrapper::basic_rx_minimal;
+use egglog_wrapper::basic_tx_minimal;
 
 #[egglog_ty]
 enum Cons {
@@ -26,7 +26,7 @@ fn main() {
     let _root = Root::new_v(&VecCon::new(vec![&node2]));
     let root = Root::new_v(&VecCon::new(vec![&node3]));
     F::set((), &root);
-    MyRx::rx().to_dot("egraph.dot".into());
+    MyRx::tx().to_dot("egraph.dot".into());
 }
 
-basic_rx_minimal!(MyRx);
+basic_tx_minimal!(MyRx);

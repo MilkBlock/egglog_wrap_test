@@ -1,7 +1,7 @@
 use std::{path::PathBuf, str::FromStr};
 
 use egglog_macros::egglog_ty;
-use egglog_wrapper::basic_rx_vt;
+use egglog_wrapper::basic_tx_vt;
 
 #[egglog_ty]
 enum Eq {
@@ -19,7 +19,7 @@ fn main() {
     eq2.commit();
     eq1.commit();
 
-    MyRx::rx().to_dot(PathBuf::from_str("egraph").unwrap());
+    MyRx::tx().to_dot(PathBuf::from_str("egraph").unwrap());
 }
 
-basic_rx_vt!(MyRx);
+basic_tx_vt!(MyRx);

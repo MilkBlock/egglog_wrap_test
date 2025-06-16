@@ -2,12 +2,12 @@ use crate::{collect_string_type_defs, wrap::*};
 use egglog::{EGraph, SerializeConfig, ast::Command};
 use std::{path::PathBuf, sync::Mutex};
 
-pub struct RxMinimal {
+pub struct TxMinimal {
     egraph: Mutex<EGraph>,
 }
 
-/// Rx with miminal feature (only new function is supported)
-impl RxMinimal {
+/// tx with miminal feature (only new function is supported)
+impl TxMinimal {
     pub fn new_with_string_type_defs(type_defs: String) -> Self {
         Self {
             egraph: Mutex::new({
@@ -44,17 +44,17 @@ impl RxMinimal {
     }
 }
 
-unsafe impl Send for RxMinimal {}
-unsafe impl Sync for RxMinimal {}
+unsafe impl Send for TxMinimal {}
+unsafe impl Sync for TxMinimal {}
 // MARK: Receiver
-impl Rx for RxMinimal {
-    fn receive(&self, received: RxCommand) {
+impl Tx for TxMinimal {
+    fn send(&self, received: TxCommand) {
         log::info!("{:?}", received);
         match received {
-            RxCommand::StringCommand { string_command } => {
+            TxCommand::StringCommand { string_command } => {
                 self.interpret(string_command);
             }
-            RxCommand::NativeCommand { native_command } => todo!(),
+            TxCommand::NativeCommand { native_command: _ } => todo!(),
         }
     }
 
@@ -63,7 +63,7 @@ impl Rx for RxMinimal {
     }
 
     fn on_set(&self, _node: &mut (impl crate::wrap::EgglogNode + 'static)) {
-        panic!("set is unsupported for rx_minimal")
+        panic!("set is unsupported for tx_minimal")
     }
 
     fn on_func_set<'a, F: EgglogFunc>(
@@ -72,9 +72,9 @@ impl Rx for RxMinimal {
         output: <F::Output as crate::wrap::EgglogFuncOutput>::Ref<'a>,
     ) {
         let input_nodes = input.as_nodes();
-        let mut input_syms = input_nodes.iter().map(|x| x.cur_sym());
+        let input_syms = input_nodes.iter().map(|x| x.cur_sym());
         let output = output.as_node().cur_sym();
-        self.receive(RxCommand::StringCommand {
+        self.send(TxCommand::StringCommand {
             string_command: format!(
                 "(set ({} {}) {} )",
                 F::FUNC_NAME,
@@ -83,4 +83,18 @@ impl Rx for RxMinimal {
             ),
         });
     }
+
+    // fn on_funcs_get<'a,'b, F: EgglogFunc>(
+    //     &self,
+    //     max_size:Option<usize>)->
+    // Vec<(<F::Input as EgglogFuncInputs>::Ref<'b>,<F::Output as EgglogFuncOutput>::Ref<'b>)> {
+    //     todo!()
+    // }
+
+    // fn on_func_get<'a,'b, F: EgglogFunc>(
+    //     &self,
+    //     input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    // ) -> <F::Output as EgglogFuncOutput>::Ref<'b> {
+    //     todo!()
+    // }
 }

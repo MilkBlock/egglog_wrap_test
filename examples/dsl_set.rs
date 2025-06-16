@@ -1,5 +1,5 @@
 use egglog_macros::egglog_ty;
-use egglog_wrapper::basic_rx_no_vt;
+use egglog_wrapper::basic_tx_no_vt;
 
 #[egglog_ty]
 enum Cons {
@@ -23,7 +23,7 @@ fn main() {
     let node3 = Cons::new_value(1, &node2);
     let root = Root::new_v(&VecCon::new(vec![&node1, &node2, &node3]));
     node2.set_v(5);
-    MyRx::rx().to_dot("egraph.dot".into());
+    MyRx::tx().to_dot("egraph.dot".into());
 }
 
-basic_rx_no_vt!(MyRx);
+basic_tx_no_vt!(MyRx);
