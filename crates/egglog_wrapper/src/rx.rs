@@ -1,7 +1,4 @@
-use crate::{
-    collect_string_type_defs,
-    wrap::{EgglogNode, Rx, Sym, WorkAreaNode},
-};
+use crate::{collect_string_type_defs, wrap::*};
 use dashmap::DashMap;
 use egglog::{EGraph, SerializeConfig, util::IndexSet};
 use std::{path::PathBuf, sync::Mutex};
@@ -109,7 +106,9 @@ impl RxNoVT {
         cur
     }
     fn add_node(&self, node: &(impl EgglogNode + 'static)) {
-        self.receive(node.to_egglog());
+        self.receive(RxCommand::StringCommand {
+            string_command: node.to_egglog(),
+        });
         let mut node = WorkAreaNode::new(node.clone_dyn());
         let sym = node.cur_sym();
         for succ_node in node.succs_mut() {
@@ -176,7 +175,7 @@ impl RxNoVT {
         for new_sym in topo {
             s += self.map.get(&new_sym).unwrap().egglog.to_egglog().as_str();
         }
-        self.receive(s);
+        self.receive(RxCommand::StringCommand { string_command: s });
     }
 
     // fn update_symnodes(&self, _start_iter: impl Iterator<Item = (Sym, SymbolNode)>) {
@@ -188,9 +187,14 @@ unsafe impl Send for RxNoVT {}
 unsafe impl Sync for RxNoVT {}
 // MARK: Receiver
 impl Rx for RxNoVT {
-    fn receive(&self, received: String) {
-        log::info!("{}", received);
-        self.interpret(received);
+    fn receive(&self, received: RxCommand) {
+        log::info!("{:?}", received);
+        match received {
+            RxCommand::StringCommand { string_command } => {
+                self.interpret(string_command);
+            }
+            RxCommand::NativeCommand { native_command } => todo!(),
+        }
     }
 
     fn on_new(&self, symnode: &(impl crate::wrap::EgglogNode + 'static)) {
@@ -199,5 +203,23 @@ impl Rx for RxNoVT {
 
     fn on_set(&self, symnode: &mut (impl crate::wrap::EgglogNode + 'static)) {
         self.update_symnode(symnode);
+    }
+
+    fn on_func_set<'a, F: EgglogFunc>(
+        &self,
+        input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+        output: <F::Output as crate::wrap::EgglogFuncOutput>::Ref<'a>,
+    ) {
+        let input_nodes = input.as_nodes();
+        let mut input_syms = input_nodes.iter().map(|x| x.cur_sym());
+        let output = output.as_node().cur_sym();
+        self.receive(RxCommand::StringCommand {
+            string_command: format!(
+                "(set ({} {}) {} )",
+                F::FUNC_NAME,
+                input_syms.map(|x| x.as_str()).collect::<String>(),
+                output
+            ),
+        });
     }
 }

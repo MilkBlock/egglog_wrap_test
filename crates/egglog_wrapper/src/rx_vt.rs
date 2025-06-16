@@ -1,14 +1,11 @@
-use crate::{
-    collect_string_type_defs,
-    wrap::{EgglogNode, Rx, RxCommit, Sym, VersionCtl, WorkAreaNode},
-};
+use crate::{collect_string_type_defs, wrap::*};
 use dashmap::DashMap;
 use derive_more::Display;
 use egglog::{
     EGraph, SerializeConfig,
     util::{IndexMap, IndexSet},
 };
-use std::{collections::HashMap, path::PathBuf, sync::Mutex};
+use std::{collections::HashMap, path::PathBuf, string, sync::Mutex};
 
 #[derive(Default)]
 pub struct RxVT {
@@ -341,8 +338,13 @@ impl VersionCtl for RxVT {
 
 // MARK: Receiver
 impl Rx for RxVT {
-    fn receive(&self, received: String) {
-        self.interpret(received);
+    fn receive(&self, received: RxCommand) {
+        match received {
+            RxCommand::StringCommand { string_command } => {
+                self.interpret(string_command);
+            }
+            RxCommand::NativeCommand { native_command } => todo!(),
+        }
     }
 
     fn on_new(&self, node: &(impl EgglogNode + 'static)) {
@@ -355,6 +357,24 @@ impl Rx for RxVT {
     fn on_set(&self, _node: &mut (impl EgglogNode + 'static)) {
         // do nothing, this operation has been delayed to commit
     }
+
+    fn on_func_set<'a, F: EgglogFunc>(
+        &self,
+        input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+        output: <F::Output as crate::wrap::EgglogFuncOutput>::Ref<'a>,
+    ) {
+        let input_nodes = input.as_nodes();
+        let mut input_syms = input_nodes.iter().map(|x| x.cur_sym());
+        let output = output.as_node().cur_sym();
+        self.receive(RxCommand::StringCommand {
+            string_command: format!(
+                "(set ({} {}) {} )",
+                F::FUNC_NAME,
+                input_syms.map(|x| x.as_str()).collect::<String>(),
+                output
+            ),
+        });
+    }
 }
 
 impl RxCommit for RxVT {
@@ -362,7 +382,7 @@ impl RxCommit for RxVT {
     /// 1. commit all descendants (if you also call set fn on subnodes they will also be committed)
     /// 2. commit basing the latest version of the working graph (working graph record all versions)
     /// 3. if RxCommit is implemented you can only change egraph by commit things. It's lazy.
-    fn on_commit<T: EgglogNode + 'static>(&self, commit_root: &T) {
+    fn on_commit<T: EgglogNode>(&self, commit_root: &T) {
         let check_point = CommitCheckPoint {
             committed_node_root: commit_root.cur_sym(),
             staged_set_nodes: self.staged_set_map.iter().map(|a| *a.key()).collect(),
@@ -386,9 +406,11 @@ impl RxCommit for RxVT {
             backup_staged_new_syms.insert(new);
         }
         // send egglog string to egraph
-        backup_staged_new_syms
-            .into_iter()
-            .for_each(|sym| self.receive(self.map.get(&sym).unwrap().egglog.to_egglog()));
+        backup_staged_new_syms.into_iter().for_each(|sym| {
+            self.receive(RxCommand::StringCommand {
+                string_command: self.map.get(&sym).unwrap().egglog.to_egglog(),
+            })
+        });
 
         let all_staged = IndexSet::from_iter(self.staged_set_map.iter().map(|a| *a.key()));
         // // check any absent node
@@ -421,7 +443,11 @@ impl RxCommit for RxVT {
         log::info!("nodes to topo:{:?}", created);
         self.topo_sort(&created, TopoDirection::Up)
             .into_iter()
-            .for_each(|sym| self.receive(self.map.get(&sym).unwrap().egglog.to_egglog()));
+            .for_each(|sym| {
+                self.receive(RxCommand::StringCommand {
+                    string_command: self.map.get(&sym).unwrap().egglog.to_egglog(),
+                })
+            });
     }
 
     fn on_stage<T: EgglogNode + ?Sized>(&self, node: &T) {

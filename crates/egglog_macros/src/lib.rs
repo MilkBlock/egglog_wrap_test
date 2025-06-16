@@ -47,32 +47,26 @@ pub fn egglog_func(attr: TokenStream, item: TokenStream) -> TokenStream {
                     quote!(#generic:AsRef<#ty>)
                 })
                 .collect::<Vec<_>>();
-            let generics = data_struct
-                .fields
-                .iter()
-                .enumerate()
-                .map(|(count, _field)| format_ident!("T{}", count))
-                .collect::<Vec<_>>();
+            // let generics = data_struct
+            //     .fields
+            //     .iter()
+            //     .enumerate()
+            //     .map(|(count, _field)| format_ident!("T{}", count))
+            //     .collect::<Vec<_>>();
 
             let inventory_path = inventory_wrapper_path();
             let _merge_option: proc_macro2::TokenStream = "no-merge".to_token_stream();
             let merge_option: proc_macro2::TokenStream = "merge new".to_token_stream();
             quote! {
                 pub struct #name_node<T>{_p:std::marker::PhantomData<T>}
-                impl<'a, R:RxSgl> egglog_wrapper::wrap::EgglogFunc<'a,R> for #name_node<R>{
+                impl<R:RxSgl> egglog_wrapper::wrap::EgglogFunc for #name_node<R>{
                     type Output=#output<R,()>;
-                    type Input=(#(&'a #types<R,()>,)*);
+                    type Input=(#(&'a dyn AsRef<#types<R,()>>,)*);
                     const FUNC_NAME:&'static str = stringify!(#name_node);
                 }
                 impl<'a, R:RxSgl> #name_node<R>{
-                    pub fn set(input: (#(&'a impl AsRef<#types<R,()>>,)*), output: &impl AsRef<#output<R,()>>){
-                        let egglog_string ={let (#(ref #generics,)*) = input;
-                        let mut parts = Vec::<&str>::new();
-                        #(
-                            parts.push(#generics.as_ref().cur_sym().as_str());
-                        )*
-                        parts.join(" ")};
-                        R::receive(format!("(set ({}) {} {})",Self::FUNC_NAME, egglog_string, output.as_ref().cur_sym()));
+                    pub fn set(input: (#(&'a dyn AsRef<#types<R,()>>,)*), output: &dyn AsRef<#output<R,()>>){
+                        R::on_func_set::<#name_node<R>>(input, output.as_ref());
                     }
                 }
                 #inventory_path::submit!{

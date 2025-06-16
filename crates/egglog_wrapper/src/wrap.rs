@@ -1,12 +1,26 @@
 use derive_more::{Debug, Deref, DerefMut, IntoIterator};
+use egglog::ast::NCommand;
+use impl_trait_for_tuples::impl_for_tuples;
 use smallvec::SmallVec;
 use std::{borrow::Borrow, fmt, hash::Hash, marker::PhantomData, sync::atomic::AtomicU32};
 use symbol_table::GlobalSymbol;
 
+#[derive(Debug)]
+pub enum RxCommand {
+    StringCommand { string_command: String },
+    NativeCommand { native_command: NCommand },
+}
+
 pub trait Rx: 'static {
-    fn receive(&self, received: String);
+    /// receive is guaranteed to not be called in proc macro
+    fn receive(&self, received: RxCommand);
     fn on_new(&self, node: &(impl EgglogNode + 'static));
     fn on_set(&self, node: &mut (impl EgglogNode + 'static));
+    fn on_func_set<'a, F: EgglogFunc>(
+        &self,
+        input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+        output: <F::Output as crate::wrap::EgglogFuncOutput>::Ref<'a>,
+    );
 }
 
 pub trait SingletonGetter {
@@ -14,15 +28,19 @@ pub trait SingletonGetter {
     fn rx() -> &'static Self::RetTy;
 }
 
-pub trait RxSgl: 'static {
+pub trait RxSgl: 'static + Sized {
     // delegate all functions from LetStmtRxInner
-    fn receive(received: String);
+    fn receive(received: RxCommand);
     fn on_new(node: &(impl EgglogNode + 'static));
     fn on_set(node: &mut (impl EgglogNode + 'static));
+    fn on_func_set<'a, F: EgglogFunc>(
+        input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+        output: <F::Output as EgglogFuncOutput>::Ref<'a>,
+    );
 }
 
 impl<R: Rx + 'static, T: SingletonGetter<RetTy = R> + 'static> RxSgl for T {
-    fn receive(received: String) {
+    fn receive(received: RxCommand) {
         Self::rx().receive(received);
     }
     fn on_new(node: &(impl EgglogNode + 'static)) {
@@ -30,6 +48,13 @@ impl<R: Rx + 'static, T: SingletonGetter<RetTy = R> + 'static> RxSgl for T {
     }
     fn on_set(node: &mut (impl EgglogNode + 'static)) {
         Self::rx().on_set(node);
+    }
+
+    fn on_func_set<'a, F: EgglogFunc>(
+        input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+        output: <F::Output as EgglogFuncOutput>::Ref<'a>,
+    ) {
+        Self::rx().on_func_set::<F>(input, output);
     }
 }
 
@@ -116,7 +141,7 @@ pub trait LocateVersion {
     fn locate_prev(&mut self);
 }
 /// trait of node behavior
-pub trait EgglogNode: ToEgglog + 'static {
+pub trait EgglogNode: ToEgglog {
     fn succs_mut(&mut self) -> Vec<&mut Sym>;
     fn succs(&self) -> Vec<Sym>;
     /// set new sym and return the new sym
@@ -385,14 +410,96 @@ pub trait Interpreter {
 
 // pub trait EgglogNodeMarker{ }
 
-impl<T: EgglogNode + Clone + 'static> From<T> for WorkAreaNode {
+impl<T: EgglogNode> From<T> for WorkAreaNode {
     fn from(value: T) -> Self {
-        WorkAreaNode::new(Box::new(value.clone()))
+        WorkAreaNode::new(value.clone_dyn())
     }
 }
 
-pub trait EgglogFunc<'a, R: RxSgl> {
-    type Input;
-    type Output: EgglogNode;
+/// Trait for input types that can be used in egglog functions
+pub trait EgglogFuncInput {
+    type Ref<'a>: EgglogFuncInputRef;
+    fn as_node(&self) -> &dyn EgglogNode;
+}
+/// Trait for input types that can be used in egglog functions
+pub trait EgglogFuncInputs {
+    type Ref<'a>: EgglogFuncInputsRef;
+    fn as_nodes(&self) -> Box<[&dyn EgglogNode]>;
+}
+/// Trait for input types ref that directly used as function argument
+pub trait EgglogFuncInputRef {
+    type DeRef: EgglogFuncInput + EgglogNode;
+    fn as_node(&self) -> &dyn EgglogNode;
+}
+pub trait EgglogFuncInputsRef {
+    type DeRef: EgglogFuncInputs;
+    fn as_nodes(&self) -> Box<[&dyn EgglogNode]>;
+}
+
+/// Trait for output types that can be used in egglog functions
+pub trait EgglogFuncOutput {
+    type Ref<'a>: EgglogFuncOutputRef;
+    fn as_node(&self) -> &dyn EgglogNode;
+}
+impl<T> EgglogFuncOutput for T
+where
+    T: EgglogNode + 'static,
+{
+    type Ref<'a> = &'a dyn AsRef<T>;
+    fn as_node(&self) -> &dyn EgglogNode {
+        self
+    }
+}
+impl<T: EgglogFuncOutput + EgglogNode + 'static> EgglogFuncOutputRef for &dyn AsRef<T> {
+    type DeRef<'a> = T;
+    fn as_node(&self) -> &dyn EgglogNode {
+        self.as_ref()
+    }
+}
+pub trait EgglogFuncOutputRef {
+    type DeRef<'a>: EgglogFuncOutput;
+    fn as_node(&self) -> &dyn EgglogNode;
+}
+pub trait EgglogFunc {
+    type Input: EgglogFuncInputs;
+    type Output: EgglogFuncOutput;
     const FUNC_NAME: &'static str;
+}
+impl<T> EgglogFuncInput for T
+where
+    T: EgglogNode + 'static,
+{
+    type Ref<'a> = &'a dyn AsRef<T>;
+    fn as_node(&self) -> &dyn EgglogNode {
+        self
+    }
+}
+impl<T> EgglogFuncInputRef for &dyn AsRef<T>
+where
+    T: EgglogNode + 'static,
+{
+    type DeRef = T;
+    fn as_node(&self) -> &dyn EgglogNode {
+        self.as_ref()
+    }
+}
+#[impl_for_tuples(0, 8)]
+#[tuple_types_custom_trait_bound(EgglogNode + EgglogFuncInput)]
+impl EgglogFuncInputs for Tuple {
+    for_tuples!( type Ref<'a> = ( #( Tuple::Ref<'a> ),* ); );
+    fn as_nodes(&self) -> Box<[&dyn EgglogNode]> {
+        Box::new([for_tuples!(
+            #(&self.Tuple),*
+        )])
+    }
+}
+#[impl_for_tuples(0, 8)]
+#[tuple_types_custom_trait_bound(EgglogFuncInputRef)]
+impl EgglogFuncInputsRef for TupleRef {
+    for_tuples!( type DeRef = ( #( TupleRef::DeRef ),* ); );
+    fn as_nodes(&self) -> Box<[&dyn EgglogNode]> {
+        Box::new([for_tuples!(
+            #(self.TupleRef.as_node()),*
+        )])
+    }
 }
