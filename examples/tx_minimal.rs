@@ -26,7 +26,7 @@ fn main() {
     let _root = Root::new_v(&VecCon::new(vec![&node2]));
     let root = Root::new_v(&VecCon::new(vec![&node3]));
     F::set((), &root);
-    MyRx::tx().to_dot("egraph.dot".into());
+    MyRx::sgl().to_dot("egraph.dot".into());
 }
 
 basic_tx_minimal!(MyRx);

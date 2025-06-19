@@ -27,6 +27,7 @@ impl TxNoVT {
         Self::new_with_type_defs(collect_string_type_defs())
     }
     pub fn interpret(&self, s: String) {
+        log::info!("{}",s);
         let mut egraph = self.egraph.lock().unwrap();
         egraph.parse_and_run_program(None, s.as_str()).unwrap();
     }
@@ -177,10 +178,6 @@ impl TxNoVT {
         }
         self.send(TxCommand::StringCommand { string_command: s });
     }
-
-    // fn update_symnodes(&self, _start_iter: impl Iterator<Item = (Sym, SymbolNode)>) {
-    //     todo!()
-    // }
 }
 
 unsafe impl Send for TxNoVT {}
@@ -188,7 +185,6 @@ unsafe impl Sync for TxNoVT {}
 // MARK: Receiver
 impl Tx for TxNoVT {
     fn send(&self, received: TxCommand) {
-        log::info!("{:?}", received);
         match received {
             TxCommand::StringCommand { string_command } => {
                 self.interpret(string_command);
@@ -226,18 +222,4 @@ impl Tx for TxNoVT {
             ),
         });
     }
-
-    // fn on_func_get<'a,'b, F: EgglogFunc>(
-    //     &self,
-    //     input: <F::Input as EgglogFuncInputs>::Ref<'a>,
-    // ) -> <F::Output as EgglogFuncOutput>::Ref<'b> {
-    //     todo!()
-    // }
-
-    // fn on_funcs_get<'a,'b, F: EgglogFunc>(
-    //     &self,
-    //     max_size:Option<usize>)->
-    // Vec<(<F::Input as EgglogFuncInputs>::Ref<'b>,<F::Output as EgglogFuncOutput>::Ref<'b>)> {
-    //     todo!()
-    // }
 }

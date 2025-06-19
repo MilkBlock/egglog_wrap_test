@@ -12,7 +12,7 @@ impl TxMinimal {
         Self {
             egraph: Mutex::new({
                 let mut e = EGraph::default();
-                log::info!("{}", type_defs);
+                log::debug!("{}", type_defs);
                 e.parse_and_run_program(None, type_defs.as_ref()).unwrap();
                 e
             }),
@@ -49,7 +49,7 @@ unsafe impl Sync for TxMinimal {}
 // MARK: Receiver
 impl Tx for TxMinimal {
     fn send(&self, received: TxCommand) {
-        log::info!("{:?}", received);
+        log::debug!("{:?}", received);
         match received {
             TxCommand::StringCommand { string_command } => {
                 self.interpret(string_command);

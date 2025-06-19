@@ -34,14 +34,15 @@ pub trait Rx: 'static {
         <F::Input as EgglogFuncInputs>::Ref<'b>,
         <F::Output as EgglogFuncOutput>::Ref<'b>,
     )>;
+    fn on_pull(&self,node:&(impl EgglogNode + 'static));
 }
 
-pub trait SingletonGetter {
+pub trait SingletonGetter: 'static {
     type RetTy;
-    fn tx() -> &'static Self::RetTy;
+    fn sgl() -> &'static Self::RetTy;
 }
 
-pub trait TxSgl: 'static + Sized {
+pub trait TxSgl: 'static + Sized + SingletonGetter {
     // delegate all functions from Tx
     fn receive(received: TxCommand);
     fn on_new(node: &(impl EgglogNode + 'static));
@@ -50,40 +51,57 @@ pub trait TxSgl: 'static + Sized {
         input: <F::Input as EgglogFuncInputs>::Ref<'a>,
         output: <F::Output as EgglogFuncOutput>::Ref<'a>,
     );
-    // fn on_func_get<'a,'b, F: EgglogFunc>(
-    //     &self,
-    //     input: <F::Input as EgglogFuncInputs>::Ref<'a>,
-    // ) -> <F::Output as EgglogFuncOutput>::Ref<'b>;
-    // fn on_funcs_get<'a,'b, F: EgglogFunc>(max_size:Option<usize>) -> Vec<(<F::Input as EgglogFuncInputs>::Ref<'b>, <F::Output as EgglogFuncOutput>::Ref<'b>)>;
+}
+pub trait RxSgl: 'static + Sized + SingletonGetter {
+    // delegate all functions from Rx
+    fn on_func_get<'a, 'b, F: EgglogFunc>(
+        input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    ) -> <F::Output as EgglogFuncOutput>::Ref<'b>;
+    fn on_funcs_get<'a, 'b, F: EgglogFunc>(
+        max_size: Option<usize>,
+    ) -> Vec<(
+        <F::Input as EgglogFuncInputs>::Ref<'b>,
+        <F::Output as EgglogFuncOutput>::Ref<'b>,
+    )>;
+    fn on_pull(node:&(impl EgglogNode + 'static) );
 }
 
-impl<R: Tx + 'static, T: SingletonGetter<RetTy = R> + 'static> TxSgl for T {
+impl<T: Tx + 'static, S: SingletonGetter<RetTy = T> + 'static> TxSgl for S {
     fn receive(received: TxCommand) {
-        Self::tx().send(received);
+        Self::sgl().send(received);
     }
     fn on_new(node: &(impl EgglogNode + 'static)) {
-        Self::tx().on_new(node);
+        Self::sgl().on_new(node);
     }
     fn on_set(node: &mut (impl EgglogNode + 'static)) {
-        Self::tx().on_set(node);
+        Self::sgl().on_set(node);
     }
 
     fn on_func_set<'a, F: EgglogFunc>(
         input: <F::Input as EgglogFuncInputs>::Ref<'a>,
         output: <F::Output as EgglogFuncOutput>::Ref<'a>,
     ) {
-        Self::tx().on_func_set::<F>(input, output);
+        Self::sgl().on_func_set::<F>(input, output);
     }
-    // fn on_func_get<'a,'b, F: EgglogFunc>(
-    //     &self,
-    //     input: <F::Input as EgglogFuncInputs>::Ref<'a>,
-    // ) -> <F::Output as EgglogFuncOutput>::Ref<'b> {
-    //     Self::tx().on_func_get::<F>(input)
-    // }
+}
+impl<R: Rx + 'static, S: SingletonGetter<RetTy = R> + 'static> RxSgl for S {
+    fn on_func_get<'a, 'b, F: EgglogFunc>(
+        input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    ) -> <F::Output as EgglogFuncOutput>::Ref<'b> {
+        Self::sgl().on_func_get::<F>(input)
+    }
 
-    // fn on_funcs_get<'a,'b, F: EgglogFunc>(max_size:Option<usize>) -> Vec<(<F::Input as EgglogFuncInputs>::Ref<'b>, <F::Output as EgglogFuncOutput>::Ref<'b>)> {
-    //     Self::tx().on_funcs_get::<F>(max_size)
-    // }
+    fn on_funcs_get<'a, 'b, F: EgglogFunc>(
+        max_size: Option<usize>,
+    ) -> Vec<(
+        <F::Input as EgglogFuncInputs>::Ref<'b>,
+        <F::Output as EgglogFuncOutput>::Ref<'b>,
+    )> {
+        Self::sgl().on_funcs_get::<F>(max_size)
+    }
+    fn on_pull(node:&(impl EgglogNode + 'static) ) {
+        Self::sgl().on_pull(node)
+    }
 }
 
 /// version control triat
@@ -110,22 +128,22 @@ pub trait VersionCtlSgl {
 
 impl<Ret: Tx + VersionCtl + 'static, S: SingletonGetter<RetTy = Ret>> VersionCtlSgl for S {
     fn locate_latest(node: Sym) -> Sym {
-        Self::tx().locate_latest(node)
+        Self::sgl().locate_latest(node)
     }
     fn locate_next(node: Sym) -> Sym {
-        Self::tx().locate_next(node)
+        Self::sgl().locate_next(node)
     }
     fn locate_prev(node: Sym) -> Sym {
-        Self::tx().locate_prev(node)
+        Self::sgl().locate_prev(node)
     }
     fn set_latest(node: &mut Sym) {
-        Self::tx().set_latest(node)
+        Self::sgl().set_latest(node)
     }
     fn set_next(node: &mut Sym) {
-        Self::tx().set_next(node)
+        Self::sgl().set_next(node)
     }
     fn set_prev(node: &mut Sym) {
-        Self::tx().set_prev(node)
+        Self::sgl().set_prev(node)
     }
 }
 
@@ -194,7 +212,7 @@ pub trait EgglogEnumVariantTy: Clone + 'static {
 pub struct Node<T, R, I, S>
 where
     T: EgglogTy,
-    R: TxSgl,
+    R: SingletonGetter,
     I: NodeInner<T>,
     S: EgglogEnumVariantTy,
 {
@@ -208,7 +226,7 @@ where
 impl<T, R, I, S> AsRef<Node<T, R, I, ()>> for Node<T, R, I, S>
 where
     T: EgglogTy,
-    R: TxSgl,
+    R: SingletonGetter,
     I: NodeInner<T>,
     S: EgglogEnumVariantTy,
 {
@@ -403,11 +421,11 @@ where
     S: SingletonGetter<RetTy = Ret>,
 {
     fn on_commit<T: EgglogNode>(node: &T) {
-        S::tx().on_commit(node);
+        S::sgl().on_commit(node);
     }
 
     fn on_stage<T: EgglogNode>(node: &T) {
-        S::tx().on_stage(node);
+        S::sgl().on_stage(node);
     }
 }
 
@@ -449,7 +467,7 @@ pub trait EgglogFuncInput {
     type Ref<'a>: EgglogFuncInputRef;
     fn as_node(&self) -> &dyn EgglogNode;
 }
-/// Trait for input types that can be used in egglog functions
+/// Trait for input tuple that can be used in egglog functions
 pub trait EgglogFuncInputs {
     type Ref<'a>: EgglogFuncInputsRef;
     fn as_nodes(&self) -> Box<[&dyn EgglogNode]>;
@@ -465,7 +483,7 @@ pub trait EgglogFuncInputsRef {
 }
 
 /// Trait for output types that can be used in egglog functions
-pub trait EgglogFuncOutput {
+pub trait EgglogFuncOutput: 'static {
     type Ref<'a>: EgglogFuncOutputRef;
     fn as_node(&self) -> &dyn EgglogNode;
 }
@@ -529,5 +547,5 @@ impl EgglogFuncInputsRef for TupleRef {
         Box::new([for_tuples!(
             #(self.TupleRef.as_node()),*
         )])
-    }
+   }
 }

@@ -1,5 +1,5 @@
 use egglog_macros::{egglog_func, egglog_ty};
-use egglog_wrapper::basic_tx_vt;
+use egglog_wrapper::basic_tx_rx_vt;
 
 #[egglog_ty]
 enum Cons {
@@ -39,4 +39,4 @@ fn main() {
     MyTx::sgl().to_dot("egraph1.dot".into());
 }
 
-basic_tx_vt!(MyTx);
+basic_tx_rx_vt!(MyTx);

@@ -18,12 +18,12 @@ enum Root {
 }
 
 fn main() {
-    let node1 = Cons::new_value(3, &Cons::<MyRx>::new_end());
+    let node1 = Cons::new_value(3, &Cons::<MyTx>::new_end());
     let mut node2 = Cons::new_value(2, &node1);
     let node3 = Cons::new_value(1, &node2);
     let root = Root::new_v(&VecCon::new(vec![&node1, &node2, &node3]));
     let m = root.cur_sym();
-    MyRx::tx().to_dot("egraph.dot".into());
+    MyTx::sgl().to_dot("egraph.dot".into());
 }
 
-basic_tx_no_vt!(MyRx);
+basic_tx_no_vt!(MyTx);

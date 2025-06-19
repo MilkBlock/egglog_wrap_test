@@ -5,10 +5,11 @@ use egglog::{
     EGraph, SerializeConfig,
     util::{IndexMap, IndexSet},
 };
+use symbol_table::GlobalSymbol;
 use std::{collections::HashMap, path::PathBuf, sync::Mutex};
 
 #[derive(Default)]
-pub struct TxVT {
+pub struct TxRxVT {
     egraph: Mutex<EGraph>,
     map: DashMap<Sym, WorkAreaNode>,
     /// used to store staged node of committed nodes (Not only the currently latest node but also nodes of old versions)
@@ -34,7 +35,7 @@ pub enum TopoDirection {
     Down,
 }
 /// Tx with version ctl feature
-impl TxVT {
+impl TxRxVT {
     pub fn interpret_string(&self, s: String) {
         log::info!("{}", s);
         let mut egraph = self.egraph.lock().unwrap();
@@ -104,8 +105,9 @@ impl TxVT {
         for (i, (in_degree, out_degree)) in ins.iter_mut().zip(outs.iter_mut()).enumerate() {
             let sym = index_set[i];
             let node = self.map.get(&sym).unwrap();
-            *in_degree = TxVT::degree_in_subgraph(node.preds().into_iter().map(|x| *x), index_set);
-            *out_degree = TxVT::degree_in_subgraph(node.succs().into_iter(), index_set);
+            *in_degree =
+                TxRxVT::degree_in_subgraph(node.preds().into_iter().map(|x| *x), index_set);
+            *out_degree = TxRxVT::degree_in_subgraph(node.succs().into_iter(), index_set);
         }
         let (mut _ins, mut outs) = match direction {
             TopoDirection::Up => (ins, outs),
@@ -223,7 +225,7 @@ impl TxVT {
         }
 
         // NB: ancestors set now contains all nodes that need to create
-        log::trace!("all latest_ancestors {:?}", ancestors);
+        log::debug!("all latest_ancestors {:?}", ancestors);
 
         let mut next_syms = IndexSet::default();
         for ancestor in ancestors {
@@ -283,15 +285,15 @@ impl TxVT {
                 }
             }
         }
-        log::trace!("{:#?}", self.map);
+        log::debug!("{:#?}", self.map);
 
         next_syms
     }
 }
 
-unsafe impl Send for TxVT {}
-unsafe impl Sync for TxVT {}
-impl VersionCtl for TxVT {
+unsafe impl Send for TxRxVT {}
+unsafe impl Sync for TxRxVT {}
+impl VersionCtl for TxRxVT {
     /// locate the lastest version of the symbol
     fn locate_latest(&self, old: Sym) -> Sym {
         let map = &self.map;
@@ -337,13 +339,13 @@ impl VersionCtl for TxVT {
 }
 
 // MARK: Receiver
-impl Tx for TxVT {
+impl Tx for TxRxVT {
     fn send(&self, received: TxCommand) {
         match received {
             TxCommand::StringCommand { string_command } => {
                 self.interpret_string(string_command);
             }
-            TxCommand::NativeCommand { native_command:_ } => todo!(),
+            TxCommand::NativeCommand { native_command } => todo!(),
         }
     }
 
@@ -375,9 +377,10 @@ impl Tx for TxVT {
             ),
         });
     }
+
 }
 
-impl TxCommit for TxVT {
+impl TxCommit for TxRxVT {
     /// commit behavior:
     /// 1. commit all descendants (if you also call set fn on subnodes they will also be committed)
     /// 2. commit basing the latest version of the working graph (working graph record all versions)
@@ -453,4 +456,48 @@ impl TxCommit for TxVT {
     fn on_stage<T: EgglogNode + ?Sized>(&self, node: &T) {
         self.staged_set_map.insert(node.cur_sym(), node.clone_dyn());
     }
+}
+
+impl Rx for TxRxVT {
+    fn on_func_get<'a, 'b, F: EgglogFunc>(
+        &self,
+        _input: <F::Input as EgglogFuncInputs>::Ref<'a>,
+    ) -> <F::Output as EgglogFuncOutput>::Ref<'b> {
+        let mut _egraph = self.egraph.lock().unwrap();
+        // let dag = egraph.function_to_dag(EgglogFunc::FUNC_NAME.into(), max_size.unwrap_or(usize::MAX));
+        let sym :GlobalSymbol=F::FUNC_NAME.into();
+        let _f = _egraph.functions.get(&sym);
+        // match f{
+        //     Some(f) => {
+        //         let nodes = f
+        //             .nodes
+        //             .iter(true)
+        //             .take(1)
+        //             .map(|(k, v)| (ValueVec::from(k), v.clone()))
+        //             .collect::<Vec<_>>();
+        //             };
+        //     None => todo!(),
+        // };
+        panic!();
+    }
+
+    fn on_funcs_get<'a, 'b, F: EgglogFunc>(
+        &self,
+        _max_size: Option<usize>,
+    ) -> Vec<(
+        <F::Input as EgglogFuncInputs>::Ref<'b>,
+        <F::Output as EgglogFuncOutput>::Ref<'b>,
+    )> {
+        todo!()
+    }
+
+    fn on_pull(&self,_node:&(impl EgglogNode + 'static)) {
+        todo!()
+    }
+    
+    // fn on_funcs_get<'a,'b, F: EgglogFunc>(
+    //     &self, max_size:Option<usize>) ->
+    // Vec<(<<F as EgglogFunc>::Input as EgglogFuncInputs>::Ref<'b>, <<F as EgglogFunc>::Output as EgglogFuncOutput>::Ref<'b>)> {
+    //     todo!()
+    // }
 }

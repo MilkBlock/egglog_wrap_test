@@ -18,10 +18,10 @@ enum B {
 ///
 /// Only DAG is supported.
 fn main() {
-    let mut a = A::new_a_con(&B::<MyRx>::new_empty());
-    let b = B::<MyRx>::new_empty();
+    let mut a = A::new_a_con(&B::<MyTx>::new_empty());
+    let b = B::<MyTx>::new_empty();
     a.set_b(&B::new_b_con(&a));
-    MyRx::tx().to_dot(PathBuf::from("egraph"));
+    MyTx::sgl().to_dot(PathBuf::from("egraph"));
 }
 
-basic_tx_no_vt!(MyRx);
+basic_tx_no_vt!(MyTx);
